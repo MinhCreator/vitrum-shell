@@ -23,6 +23,7 @@
   <img src="https://img.shields.io/badge/Gentoo-OpenRC%20%7C%20systemd-54487a?style=flat-square&logo=gentoo&logoColor=white" alt="Gentoo">
   <img src="https://img.shields.io/badge/Fedora-systemd-51a2da?style=flat-square&logo=fedora&logoColor=white" alt="Fedora">
   <img src="https://img.shields.io/badge/Void-runit-478061?style=flat-square&logo=voidlinux&logoColor=white" alt="Void">
+  <img src="https://img.shields.io/badge/NixOS-flake-5277c3?style=flat-square&logo=nixos&logoColor=white" alt="NixOS">
   <img src="https://img.shields.io/badge/NVIDIA-works-76b900?style=flat-square&logo=nvidia&logoColor=white" alt="NVIDIA works">
 </p>
 
@@ -91,7 +92,7 @@ when something breaks.
 ## What's inside
 
 > [!NOTE]
-> **New in 0.6.0:** vitrum's own glass, written from scratch and lit by one light across the screen and by what's behind it, so no two panels catch it alike. niri moves to current main, with a ready-made build on Arch. The shell uses far less memory, Japanese, Korean and Chinese input arrive through fcitx5, GPU stats work on AMD, and a crash now tells you what happened.
+> **New in 0.7.0:** a full-screen player with the cover, synced lyrics you can click to seek and a spectrum along the bottom (`Mod+Alt+M`). Volume, brightness and keyboard layout now flow out of the bar's centre island as part of its glass. The login screen matches the lock screen, down to the clock and the wrong-password shake. And vitrum installs on NixOS, as a flake.
 
 ### Desktop
 
@@ -99,7 +100,9 @@ when something breaks.
 - 40 desktop widgets: clocks, weather, system graphs, a to-do list, an agenda, habits, a stopwatch, the moon, air quality, headlines and top processes. Add your own in QML or as a script, and arrange them right on the desktop.
 - A bar editor in Settings. Drag modules between islands and sides on a live bar, pick from a palette of named modules, set each one's options, give each screen its own layout, or reset.
 - Type Japanese, Korean and Chinese with an optional input method: fcitx5 with Mozc, Hangul and Pinyin takes over your layouts, and Alt+Shift still switches them.
-- A lock screen whose field lights up as you type. Caps Lock gets a hint, your avatar sits in a coloured ring, and it goes quiet when idle.
+- A lock screen whose field lights up as you type. Caps Lock gets a hint, your avatar sits in a rim of lit glass, and it goes quiet when idle.
+- Volume, microphone, brightness and keyboard layout show as a drop of glass under the bar's centre island, with every layout in a row and the current one lit.
+- A player with the cover behind it, synced lyrics and a spectrum, in the bar, on the desktop and on the lock screen. `Mod+Alt+M` opens it full screen: click a line of the lyrics to jump there.
 - Game mode turns on by itself when a game goes fullscreen. Video wallpapers pause under windows.
 - Lite mode for older hardware: blur, glass, animations, shadows, the live wallpaper and more, off one by one or all at once, by hand or on battery.
 
@@ -108,7 +111,8 @@ when something breaks.
 - Settings for everyday changes, so config files stay optional.
 - About this computer, as spec tiles.
 - A welcome tour on first login, with a live preview of each part of the desktop.
-- Clipboard history, screenshots and recording, synced lyrics, hot corners, a polkit prompt and a login screen that match.
+- Clipboard history, screenshots and recording, hot corners and a polkit prompt.
+- A login screen (SDDM) that is the lock screen's twin: the same clock, field and icons, in your scheme and colours.
 
 ### Theming
 
@@ -121,7 +125,7 @@ when something breaks.
 ### Under the hood
 
 - niri, with our own glass patched in: it bends what's behind it, takes its colour and catches the light, in the shape of each surface. Choose solid, frosted or glass per surface if your GPU prefers.
-- A [Quickshell](https://quickshell.org) shell, one installer for four distributions, and `vitrum doctor` when something's off.
+- A [Quickshell](https://quickshell.org) shell, one installer for four distributions, a flake for NixOS, and `vitrum doctor` when something's off.
 - GPU load and temperature on NVIDIA and AMD.
 - If the shell crashes, it comes back and tells you why. `vitrum doctor` lists recent crashes.
 
