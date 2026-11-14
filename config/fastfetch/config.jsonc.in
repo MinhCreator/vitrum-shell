@@ -74,7 +74,7 @@
     {
       "type": "command",
       "key": "\uf1b2  Desktop",
-      "text": "cat \"$HOME/.local/share/vitrum/version\" 2>/dev/null | sed 's/^/vitrum /' || echo vitrum"
+      "text": "v=\"${VITRUM_VERSION:-$(cat \"$HOME/.local/share/vitrum/version\" 2>/dev/null)}\"; echo \"vitrum${v:+ $v}\""
     },
 
     "break",

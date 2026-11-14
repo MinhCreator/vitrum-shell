@@ -1,9 +1,20 @@
 """What vitrum-portal decides, apart from D-Bus: cursor modes, the picker's
 answer, and the streams handed back to the app."""
 import json
+import os
+import shutil
 
 MONITOR, WINDOW = 1, 2          # portal source types (bitmask)
 CURSOR_HIDDEN, CURSOR_EMBEDDED, CURSOR_METADATA = 1, 2, 4   # portal cursor modes (bitmask)
+
+
+def ipc_command(env=None, which=shutil.which):
+    """vitrum-ipc, which asks the shell for its picker: VITRUM_IPC, then the
+    PATH, then where the installer writes it — D-Bus starts this service with
+    a PATH that may not have ~/.local/bin."""
+    env = os.environ if env is None else env
+    home = env.get("HOME") or os.path.expanduser("~")
+    return env.get("VITRUM_IPC") or which("vitrum-ipc") or os.path.join(home, ".local/bin/vitrum-ipc")
 
 
 def mutter_cursor(portal_mode, show_cursor=None):

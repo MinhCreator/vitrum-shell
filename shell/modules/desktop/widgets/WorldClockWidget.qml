@@ -46,15 +46,17 @@ Item {
     }
     function kick() {
         pending = false;
-        probe.command = ["sh", "-c", probe.script, "sh"].concat(zones);
+        probe.command = ["sh", "-c", probe.script, Paths.zoneinfoDirs.join(":")].concat(zones);
         probe.running = true;
     }
     Process {
         id: probe
         onRunningChanged: if (!running && root.pending) Qt.callLater(root.kick)
         // A name is a zone when its file exists (glibc quietly takes an unknown TZ as UTC).
-        readonly property string script: 'for z; do case "$z" in *..*|/*) echo "$z ?"; continue;; esac; ' +
-            'if [ -f "/usr/share/zoneinfo/$z" ]; then echo "$z $(TZ="$z" date +%z)"; else echo "$z ?"; fi; done'
+        // $0 is where zoneinfo may be (Paths.zoneinfoDirs), colon-separated.
+        readonly property string script: 'IFS=:; for z; do case "$z" in *..*|/*) echo "$z ?"; continue;; esac; ' +
+            'ok=; for d in $0; do [ -f "$d/$z" ] && ok=1; done; ' +
+            'if [ -n "$ok" ]; then echo "$z $(TZ="$z" date +%z)"; else echo "$z ?"; fi; done'
         stdout: StdioCollector {
             onStreamFinished: {
                 const out = {};

@@ -2,7 +2,9 @@
 """vitrum-steam-theme — vitrum's theme for Steam, through Millennium.
 
   vitrum-steam-theme status      one line of JSON: {"millennium", "installed",
-                                 "active", "steamRunning", "themeDir"}
+                                 "active", "steamRunning", "themeDir",
+                                 "unsupported"} — the last names the system
+                                 Millennium cannot be installed on (NixOS), else ""
   vitrum-steam-theme apply       write the theme's colours from vitrum's palette
                                  and settings (steam.theme.*), and switch the
                                  theme on or off in Millennium; installs nothing

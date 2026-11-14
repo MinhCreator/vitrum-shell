@@ -27,16 +27,24 @@ import "../lib/dnf.js" as Dnf
  *                          hours.
  *
  * All read into the same shape (lib/emerge.js, pacman.js, xbps.js, dnf.js).
+ *
+ * NixOS ("nix") is named and nothing more: a rebuild is not a run with steps,
+ * and what would change is the flake's to say, not a list of updates. Nothing
+ * is followed, checked or offered there; the list stays empty.
  */
 Singleton {
     id: root
-    /// "portage" | "pacman" | "xbps" | "dnf" | "" (none of them)
+    /// "portage" | "pacman" | "xbps" | "dnf" | "nix" | "" (none of them)
     property string backend: ""
+    /// Something to follow and to list (not NixOS, not an unknown system).
+    readonly property bool tracked: backend !== "" && backend !== "nix"
+    /// What stands where the list would be, on a system that has none to make.
+    readonly property string noList: backend === "nix" ? "Updates come with your NixOS rebuild" : ""
     readonly property bool gentoo: backend === "portage"
     /// No log to follow (xbps, dnf): a run is only running, then over.
     readonly property bool logless: backend === "xbps" || backend === "dnf"
     readonly property string toolName: backend === "portage" ? "emerge" : backend
-    readonly property string who: ({ portage: "Portage", pacman: "pacman", xbps: "xbps", dnf: "dnf" })[backend] || ""
+    readonly property string who: ({ portage: "Portage", pacman: "pacman", xbps: "xbps", dnf: "dnf", nix: "Nix" })[backend] || ""
     // Where our update command says it runs, then how it ended (the logless backends).
     readonly property string rcFile: (Quickshell.env("XDG_RUNTIME_DIR") || "/tmp") + "/vitrum-update." + backend + ".rc"
     property var state: ({ running: false, ok: true, done: 0, total: 0, current: "", since: 0, started: 0, failed: "" })
@@ -46,7 +54,9 @@ Singleton {
 
     Process {
         running: true
-        command: ["sh", "-c", "if command -v emerge >/dev/null; then echo portage; elif command -v pacman >/dev/null; then echo pacman; "
+        // NixOS first: a pacman or dnf in someone's profile there manages nothing.
+        command: ["sh", "-c", "if [ -e /etc/NIXOS ] || grep -qs '^ID=nixos$' /etc/os-release; then echo nix; "
+                  + "elif command -v emerge >/dev/null; then echo portage; elif command -v pacman >/dev/null; then echo pacman; "
                   + "elif command -v xbps-install >/dev/null; then echo xbps; elif command -v dnf >/dev/null; then echo dnf; fi"]
         stdout: StdioCollector { onStreamFinished: root.backend = text.trim() }
     }
@@ -118,7 +128,7 @@ Singleton {
     // Fast while something runs, slow otherwise, slower still in a game (a
     // shutdown after the build still comes, a minute late at most).
     Timer {
-        interval: GameMode.active ? 60000 : root.state.running ? 2000 : 15000; repeat: true; running: root.backend !== ""; triggeredOnStart: true
+        interval: GameMode.active ? 60000 : root.state.running ? 2000 : 15000; repeat: true; running: root.tracked; triggeredOnStart: true
         onTriggered: {
             root.now = Date.now() / 1000;
             const p = root.logless ? watch : tail;
@@ -131,9 +141,9 @@ Singleton {
     property real checkedSync: 0
     property bool checking: false
     Timer { id: updatesLater; interval: 5000; onTriggered: root.checkUpdates(true) }
-    Timer { interval: 3 * 3600 * 1000; repeat: true; running: root.backend !== ""; triggeredOnStart: true; onTriggered: root.checkUpdates(false) }
+    Timer { interval: 3 * 3600 * 1000; repeat: true; running: root.tracked; triggeredOnStart: true; onTriggered: root.checkUpdates(false) }
     function checkUpdates(force) {
-        if (checking || state.running || !backend) return;
+        if (checking || state.running || !tracked) return;
         if (backend === "pacman") { checking = true; pacmanCheck.running = true; return; }
         if (logless) { checking = true; loglessCheck.running = true; return; }
         syncStamp.force = force;

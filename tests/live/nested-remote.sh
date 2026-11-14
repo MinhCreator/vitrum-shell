@@ -1,6 +1,9 @@
 # Runs on terpinator (fed to bash -s by nested.sh). STEPS holds the steps, one per line.
 set -u
-export XDG_RUNTIME_DIR=/run/user/1000 WAYLAND_DISPLAY=wayland-1
+# The user's session is uid 1000 on wayland-1. Under another account (the test
+# user) the runtime dir is its own and no display in it is the user's.
+export XDG_RUNTIME_DIR="/run/user/$(id -u)" WAYLAND_DISPLAY=wayland-1
+USERWL=wayland-1; [ "$(id -u)" = 1000 ] || USERWL=none
 # NESTED_DIR: this session's own folder, so several nested sessions can run at once.
 N="${NESTED_DIR:-/tmp/vitrum-nested}"
 H="$N/home"
@@ -46,7 +49,7 @@ ENVV="\"env\" \"VITRUM_TEST_WALL=$WALL\" \"HOME=$H\" \"XDG_CONFIG_HOME=$H/.confi
   echo "spawn-at-startup $ENVV \"qs\" \"-p\" \"$N/wall/shell.qml\""
   echo "spawn-at-startup \"sh\" \"-c\" \"sleep 0.5; exec env HOME=$H XDG_CONFIG_HOME=$H/.config XDG_DATA_HOME=$H/.local/share PATH=$TPATH ${SHELL_ENV:-} qs -p $N/shell/shell.qml > $N/shell.log 2>&1\""
 } > "$C/generated/session.kdl"
-HS=$(ls -t "$XDG_RUNTIME_DIR"/niri.wayland-1.*.sock 2>/dev/null | head -1)   # the host session (the user's), if it is niri
+HS=$(ls -t "$XDG_RUNTIME_DIR"/niri.$USERWL.*.sock 2>/dev/null | head -1)   # the host session (the user's), if it is niri
 # NESTED_HOST=headless (default): niri runs inside a headless tinywl, not in the
 # user's session — nothing shows there, and a locked session cannot stall it.
 # NESTED_HOST=session: inside the user's session (hostshot needs that).
@@ -65,7 +68,7 @@ fi
 # A nested shell left locked by an earlier run would lock again at start (its
 # marker survives): clear the nested displays' markers — never wayland-1's, the user's.
 for m in "$XDG_RUNTIME_DIR"/vitrum-locked-wayland-*; do
-  [ -e "$m" ] && [ "$m" != "$XDG_RUNTIME_DIR/vitrum-locked-wayland-1" ] && rm -f "$m"
+  [ -e "$m" ] && [ "$m" != "$XDG_RUNTIME_DIR/vitrum-locked-$USERWL" ] && rm -f "$m"
 done
 # NESTED_DBUS=1: a private session bus for everything nested (niri, shell,
 # portals), and niri publishing its D-Bus interfaces (screencast) on it.
@@ -105,15 +108,15 @@ qsipc() { local p; p=$(pgrep -n -f "qs -p $N/shell/shell.qml"); qs ipc --pid "$p
 # step refused) unless it is a live socket that is not the user's (wayland-1, the
 # host session's display) and not the headless host's.
 ND="$(basename "${S:-none}" | cut -d. -f2)"
-UD="$(basename "${HS:-x.wayland-1.x}" | cut -d. -f2)"
-if [ -z "$S" ] || [ -z "$ND" ] || [ "$ND" = wayland-1 ] || [ "$ND" = "$UD" ] || [ "$ND" = "${HOSTWL:-}" ] \
+UD="$(basename "${HS:-x.$USERWL.x}" | cut -d. -f2)"
+if [ -z "$S" ] || [ -z "$ND" ] || [ "$ND" = "$USERWL" ] || [ "$ND" = "$UD" ] || [ "$ND" = "${HOSTWL:-}" ] \
    || [ ! -S "$XDG_RUNTIME_DIR/$ND" ] || ! NIRI_SOCKET="$S" niri msg version >/dev/null 2>&1; then
   echo "SAFETY: no nested display (got '$ND', user's '$UD'): input, run: and bg: steps are refused" >> "$N/steps.log"
   ND=""
 fi
 echo "nested display: ${ND:-none} (user's: $UD, headless host: ${HOSTWL:-none})" >> "$N/steps.log"
 nest() {
-  case "$ND" in ""|wayland-1|"$UD") echo "SAFETY: refused '$*' (display '${ND:-unset}')" >> "$N/steps.log"; return 1 ;; esac
+  case "$ND" in ""|"$USERWL"|"$UD") echo "SAFETY: refused '$*' (display '${ND:-unset}')" >> "$N/steps.log"; return 1 ;; esac
   echo "  [$ND] $*" >> "$N/steps.log"
   WAYLAND_DISPLAY="$ND" NIRI_SOCKET="$S" "$@"
 }

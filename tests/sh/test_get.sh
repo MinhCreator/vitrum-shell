@@ -183,3 +183,38 @@ test_no_sudo_says_how_to_get_it() {
     [[ "$out" != *"command not found"* ]] || { echo "$out"; return 1; }
   done
 }
+
+# NixOS takes vitrum as a flake: get.sh says what to add, and neither clones
+# nor installs git nor starts the installer.
+_get_os_release() {  # _get_os_release <ID> [ID_LIKE] — in a fake root
+  mkdir -p "$HOME/rootfs/etc"; export VITRUM_ROOTFS="$HOME/rootfs"
+  printf 'ID=%s\n' "$1" > "$VITRUM_ROOTFS/etc/os-release"
+  [[ -n "${2:-}" ]] && printf 'ID_LIKE="%s"\n' "$2" >> "$VITRUM_ROOTFS/etc/os-release"
+  return 0
+}
+test_nixos_is_sent_to_the_flake_before_any_clone() {
+  _get_stubs; _get_os_release nixos
+  local out rc=0
+  out="$(bash "$VITRUM_DIR/get.sh" --yes 2>&1)" || rc=$?
+  assert_eq "$rc" 1
+  assert_contains "$out" 'inputs.vitrum.url = "github:LanisOff/vitrum-shell";'
+  assert_contains "$out" "imports = [ inputs.vitrum.nixosModules.default ];"
+  assert_contains "$out" "programs.vitrum.enable = true;"
+  [[ ! -e "$HOME/calls" && ! -e "$HOME/ran" ]] || { echo "git or the installer ran"; return 1; }
+  [[ ! -e "$XDG_DATA_HOME/vitrum-src" ]]
+}
+test_nixos_without_git_does_not_install_it() {
+  _get_os_release nixos
+  local out rc=0
+  _get_without_git pacman
+  out="$(PATH="$HOME/bin" bash "$VITRUM_DIR/get.sh" 2>&1)" || rc=$?
+  assert_eq "$rc" 1
+  assert_contains "$out" "programs.vitrum.enable = true;"
+  [[ ! -e "$HOME/calls" ]] || { echo "something ran: $(cat "$HOME/calls")"; return 1; }
+}
+test_another_distribution_is_not_taken_for_nixos() {
+  _get_stubs; _get_os_release arch
+  bash "$VITRUM_DIR/get.sh" --yes
+  assert_contains "$(cat "$HOME/calls")" "clone --depth 1"
+  assert_contains "$(cat "$HOME/ran")" "--yes"
+}

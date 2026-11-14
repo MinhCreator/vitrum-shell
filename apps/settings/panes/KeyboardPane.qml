@@ -45,7 +45,8 @@ Page {
     FileView { path: page.niriDir + "config.kdl"; onLoaded: page.configText = text() }
     FileView { path: page.niriDir + "overrides.kdl"; watchChanges: true; onFileChanged: reload(); onLoaded: page.overridesText = text() }
     FileView {
-        path: "/usr/share/X11/xkb/rules/evdev.lst"
+        path: Paths.xkbRules
+        Component.onCompleted: Paths.findXkbRules()
         onLoaded: page.rules = Kb.parseRules(text())
     }
     readonly property var shown: {
@@ -151,7 +152,7 @@ Page {
             Field {
                 id: addField
                 anchors { left: parent.left; right: parent.right; margins: Tokens.padding; verticalCenter: parent.verticalCenter }
-                placeholder: page.rules.length ? "Find a layout: German, de, phonetic…" : "No xkb catalogue (/usr/share/X11/xkb/rules/evdev.lst)"
+                placeholder: page.rules.length ? "Find a layout: German, de, phonetic…" : "No xkb catalogue (" + (Paths.xkbRules || "evdev.lst") + ")"
                 onTextChanged: page.layoutQuery = text
                 onAccepted: if (page.found.length) page.pick(page.found[0].id)
             }

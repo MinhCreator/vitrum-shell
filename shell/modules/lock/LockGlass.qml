@@ -9,14 +9,16 @@ import qs.components
  * fill when the lock group is solid. Children sit on top.
  *
  *   backdrop, source   LockView's backdrop and its texture
- *   tint               the glass's colour (a wrong password turns it red)
+ *   rest               the glass's colour when it is off: the one place it is set
+ *   tint               the glass's colour (lighter under the pointer)
  */
 Item {
     id: pane
     property Item backdrop: null
     property Item source: null
     property real radius: Tokens.radiusPanel
-    property color tint: Qt.rgba(1, 1, 1, Colors.dark ? 0.07 : 0.16)
+    readonly property color rest: Qt.rgba(1, 1, 1, Colors.dark ? 0.07 : 0.16)
+    property color tint: rest
     property real edgeLight: 0.5
     property color outline: Colors.alpha(Colors.text, 0.12)
     default property alias content: inner.data

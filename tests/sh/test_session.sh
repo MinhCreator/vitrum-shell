@@ -181,10 +181,11 @@ test_dry_run_leaves_the_old_entry() {
   [[ -e "$VITRUM_SYSROOT/usr/local/share/wayland-sessions/niri.desktop" ]]
   assert_contains "$(cat "$VITRUM_SYSROOT/var/lib/sddm/state.conf")" "Session=niri.desktop"
 }
-# The theme's first-login fallback looks for the entry by its path.
+# The theme's first-login fallback looks for the vitrum entry by its file
+# (wherever the prefix put it), never for niri's own.
 test_login_theme_prefers_the_vitrum_entry() {
   q="$(cat "$VITRUM_DIR/assets/sddm/vitrum/Main.qml")"
-  assert_contains "$q" "/usr/local/share/wayland-sessions/vitrum.desktop"
+  assert_contains "$q" '/vitrum.desktop"'
   ! grep -q 'wayland-sessions/niri.desktop' <<<"$q"
 }
 test_session_kdl_is_idempotent() {

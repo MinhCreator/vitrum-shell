@@ -83,6 +83,26 @@ function rise(enter, order, last) {
     return 1 - Math.pow(1 - t, 5);
 }
 
+/// A wrong password, in ms at motion speed 1: the field swings once (`swing`)
+/// while the danger light comes on (`flashIn`), holds (`hold`) and goes
+/// (`flashOut`); the dots wait `dotsAfter`, then fade over `dotsOut`.
+var REFUSAL = { swing: 520, flashIn: 120, hold: 300, flashOut: 560, dotsAfter: 380, dotsOut: 160 };
+
+/// …scaled by the motion speed like every other duration. Never 0: with
+/// animations off the field still shows the flash for flashIn + hold.
+function refusal(speed) {
+    const k = Number(speed) > 0 ? Number(speed) : 1;
+    const out = {};
+    for (const key in REFUSAL) out[key] = Math.max(1, Math.round(REFUSAL[key] / k));
+    return out;
+}
+
+/// The line under the field: what went wrong, else that the password is being
+/// checked, else a word about Caps Lock; a space keeps the row's height.
+function statusLine(error, busy, capsLock) {
+    return String(error || "") || (busy ? "Checking…" : capsLock ? "Caps Lock is on" : " ");
+}
+
 // The picture for the avatar, in the order it is looked for: the user's own
 // ~/.face, the ~/.face.icon some desktops write, then AccountsService's copy
 // (what GNOME, KDE and the greeters set).

@@ -51,7 +51,7 @@ Singleton {
     Timer { interval: 300000; repeat: true; running: root.enabled; triggeredOnStart: true; onTriggered: if (!df.running) df.running = true }
 
     // SMART: a few minutes after login, then every six hours (through the root helper).
-    readonly property string helper: "/usr/local/libexec/vitrum/vitrum-root"
+    readonly property string helper: Paths.rootHelper
     Process {
         id: smart
         command: ["sh", "-c", 'h="$1"; test -x "$h" && command -v smartctl >/dev/null || exit 0; for d in $(pkexec "$h" disks); do printf "%s\\t" "$d"; pkexec "$h" smart "$d" | tr -d "\\n"; echo; done', "_", root.helper]

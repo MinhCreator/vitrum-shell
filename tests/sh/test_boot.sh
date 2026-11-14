@@ -23,6 +23,11 @@ test_sddm_theme_installed_selected_and_coloured() {
   [[ -f "$(_theme)/Glass.qml" && -f "$(_theme)/glass.frag.qsb" ]]
   # The tint (dichroic glass), plain QtQuick next to Glass.qml.
   [[ -f "$(_theme)/Tint.qml" ]]
+  # The lock's words and timings, and the motion maths: the same files as the shell's.
+  cmp -s "$(_theme)/lock.js" "$VITRUM_DIR/shell/lib/lock.js"
+  cmp -s "$(_theme)/motion.js" "$VITRUM_DIR/shell/lib/motion.js"
+  # No icon font fetched yet: installed without one (the theme then uses words).
+  [[ ! -e "$(_theme)/Phosphor-Light.ttf" ]]
   # The greeter reads the user's login folder (login.json) with XMLHttpRequest.
   assert_contains "$(cat "$VITRUM_SYSROOT/etc/sddm.conf.d/zz-vitrum.conf")" "QML_XHR_ALLOW_FILE_READ=1"
   c="$(cat "$(_theme)/theme.conf")"
@@ -34,6 +39,55 @@ test_sddm_theme_installed_selected_and_coloured() {
   assert_contains "$c" "background="
   assert_contains "$(cat "$VITRUM_SYSROOT/etc/sddm.conf.d/zz-vitrum.conf")" "Current=vitrum"
   assert_contains "$(cat "$HOME/calls")" "dm_use_sddm"
+}
+# Everything Main.qml loads from its own folder is installed beside it: a
+# missing file there is a login screen that does not load.
+test_sddm_theme_has_every_file_it_loads() {
+  _load_boot; stub sddm; WANT_SDDM=1; WANT_PLYMOUTH=0
+  mkdir -p "$HOME/.local/share/fonts/vitrum"; printf 'font' > "$HOME/.local/share/fonts/vitrum/Phosphor-Light.ttf"
+  stage_boot >/dev/null
+  q="$VITRUM_DIR/assets/sddm/vitrum/Main.qml"
+  # import "x.js", Qt.resolvedUrl("x") and the two component files it names.
+  for f in $(grep -oE '(import|resolvedUrl\()[[:space:]]*"[^"]+"' "$q" | sed 's/.*"\(.*\)"/\1/') Glass.qml Tint.qml glass.frag.qsb; do
+    [[ -f "$(_theme)/$f" ]] || { echo "Main.qml loads $f, which the installer does not put in the theme"; return 1; }
+  done
+  [[ -f "$(_theme)/Phosphor-Light.ttf" && -f "$(_theme)/lock.js" && -f "$(_theme)/motion.js" ]]
+  # Readable by the sddm user whatever our umask.
+  [[ -z "$(find "$(_theme)" -type f ! -perm -044)" ]]
+}
+# The theme takes its words and timings from the lock's own lock.js and
+# motion.js: every function it calls there must exist, or the greeter comes up
+# with dead bindings.
+test_sddm_theme_calls_only_what_the_shared_files_have() {
+  q="$VITRUM_DIR/assets/sddm/vitrum/Main.qml"
+  for n in $(grep -oE '\bLib\.[A-Za-z_]+' "$q" | sort -u | cut -d. -f2); do
+    grep -qE "^(function $n\(|var $n =)" "$VITRUM_DIR/shell/lib/lock.js" || { echo "lock.js has no $n"; return 1; }
+  done
+  for n in $(grep -oE '\bM\.[A-Za-z_]+' "$q" | sort -u | cut -d. -f2); do
+    grep -qE "^(function $n\(|var $n =)" "$VITRUM_DIR/shell/lib/motion.js" || { echo "motion.js has no $n"; return 1; }
+  done
+  # Plain JavaScript only: an import there would not resolve in the theme's folder.
+  ! grep -qE '^\.import|^import ' "$VITRUM_DIR/shell/lib/lock.js" "$VITRUM_DIR/shell/lib/motion.js"
+  ! grep -qE '^import (qs|Quickshell)|"root:' "$VITRUM_DIR/shell/components/Glass.qml" "$VITRUM_DIR/shell/components/Tint.qml" "$q"
+}
+# Its icons are the shell's: the same Phosphor glyph under the same name
+# (the theme keeps its own short list, since it cannot read icons.json's home).
+test_sddm_theme_icons_match_the_shell() {
+  python3 - "$VITRUM_DIR/assets/sddm/vitrum/Main.qml" "$VITRUM_DIR/shell/data/icons.json" <<'PY'
+import json, re, sys
+qml = open(sys.argv[1], encoding="utf-8").read()
+icons = json.load(open(sys.argv[2], encoding="utf-8"))
+block = qml[qml.index("readonly property var glyphs"):]
+block = block[:block.index("})")]
+mine = dict(re.findall(r'"([a-z-]+)": "\\u([0-9a-f]{4})"', block))
+assert len(mine) >= 8, "the glyph list was not found"
+for name, code in mine.items():
+    assert name in icons, f"{name} is not a name in icons.json"
+    assert f"{ord(icons[name]['phosphor']):04x}" == code, f"{name}: {code} here, another glyph in icons.json"
+# Every icon the theme asks for by name is on its list.
+for name in set(re.findall(r'\bicon: "([a-z-]+)"', qml)) | set(re.findall(r'\bname: "([a-z-]+)"', qml)):
+    assert name in mine, f"{name} is used but has no glyph"
+PY
 }
 test_sddm_background_is_the_wallpaper() {
   _load_boot; stub sddm; WANT_SDDM=1; WANT_PLYMOUTH=0

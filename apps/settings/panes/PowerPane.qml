@@ -138,14 +138,17 @@ Page {
         note: page.steamReady ? "Steam in vitrum's look, through Millennium." : ""
         SettingRow {
             visible: !page.steamReady
-            label: "Not installed"
-            hint: page.steamHelper ? "Choose “Steam theme” in the installer's games options, or install it now. It may ask for your password in a terminal."
+            // steam.unsupported names the system (NixOS) Millennium cannot be installed on.
+            label: page.steam.unsupported ? "Not supported on " + page.steam.unsupported : "Not installed"
+            hint: page.steam.unsupported ? "The theme needs Millennium, which vitrum cannot install there."
+                : page.steamHelper ? "Choose “Steam theme” in the installer's games options, or install it now. It may ask for your password in a terminal."
                                    : "Choose “Steam theme” in the installer's games options. vitrum-steam-theme is missing here: run ./install.sh --only shell first."
             divider: page.steamFailed.length > 0
             GlassButton {
                 anchors.verticalCenter: parent.verticalCenter
                 icon: "download"
                 label: page.steamBusy === "install" ? "Installing…" : "Install"
+                visible: !page.steam.unsupported
                 primary: true
                 enabled: !page.steamBusy && page.steamHelper
                 onClicked: page.steamDo("install")

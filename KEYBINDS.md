@@ -196,6 +196,7 @@ screen is locked.
 | `Mod+Alt+N` | Next track (keyboard) |
 | `Mod+Alt+P` | Previous track (keyboard) |
 | `Mod+Shift+M` | Toggle mute (keyboard) |
+| `Mod+Alt+M` | Full-screen player |
 
 ---
 

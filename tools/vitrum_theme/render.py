@@ -23,7 +23,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from . import _hex, _rgb as _rgbf, _mix as _mixt, contrast, deep_merge, ensure_contrast
+from . import _hex, _rgb as _rgbf, _mix as _mixt, contrast, deep_merge, ensure_contrast, system_data_dirs
 
 
 def _mix(a: str, b: str, t: float) -> str:
@@ -416,6 +416,15 @@ def render_all(pal: dict, scheme: str, settings: dict, templates: Path, config: 
 
 KVANTUM_BASE = Path("/usr/share/Kvantum")
 
+
+def kvantum_base(base_name: str, dirs=None) -> Path:
+    """The Kvantum folder that has the base theme: the first of the system's
+    data dirs with it, /usr/share/Kvantum when none has."""
+    for d in (system_data_dirs() if dirs is None else dirs):
+        if (Path(d) / "Kvantum" / base_name / f"{base_name}.kvconfig").is_file():
+            return Path(d) / "Kvantum"
+    return KVANTUM_BASE
+
 # Qt menus: the menu's corner radius, its shadow, and the hovered entry's capsule.
 MENU_RADIUS = 10
 MENU_SHADOW = 6
@@ -614,8 +623,8 @@ def kvantum_theme(c: dict, scheme: str, out: Path, base_dir: Path = None, name: 
     its shapes and settings, and replace only [GeneralColors] with the palette.
     Nothing happens without Kvantum. compact: the tighter variant (small radii
     and paddings, tabs on the left) for dense apps; it is written as <name>.*."""
-    base_dir = base_dir or KVANTUM_BASE
     base_name = "KvGnomeDark" if scheme == "dark" else "KvGnome"
+    base_dir = base_dir or kvantum_base(base_name)
     src = Path(base_dir) / base_name
     if not (src / f"{base_name}.kvconfig").is_file() or not (src / f"{base_name}.svg").is_file():
         return None
@@ -761,12 +770,18 @@ def _kde_get(groups, group, key):
 ICON_ROOTS = (Path("/usr/share/icons"), Path("/usr/local/share/icons"), Path.home() / ".local/share/icons")
 
 
+def icon_roots() -> list:
+    """ICON_ROOTS, and icons/ in each of the system's data dirs."""
+    roots = list(ICON_ROOTS)
+    return roots + [d / "icons" for d in system_data_dirs() if d / "icons" not in roots]
+
+
 def icon_theme(name: str, scheme: str, roots=None) -> str:
     """The icon theme for the scheme. One with -Dark/-Light variants follows it
     (Papirus-Dark in the dark, Papirus-Light in the light): a dark theme's light
     symbolic icons all but vanish on a light window. Without the variant
     installed, the choice stands."""
-    roots = ICON_ROOTS if roots is None else roots
+    roots = icon_roots() if roots is None else roots
     family = re.sub(r"-(Dark|Light)$", "", name or "")
     want = f"{family}-{'Dark' if scheme == 'dark' else 'Light'}"
     return want if any((Path(r) / want / "index.theme").is_file() for r in roots) else name

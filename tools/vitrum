@@ -13,6 +13,10 @@
 # (fast-forward only) and runs its installer, which snapshots first and only
 # rebuilds what changed. Your settings and edits are kept. A checkout without
 # an origin (a copy) follows the vitrum repository ($VITRUM_REPO overrides it).
+#
+# An install that belongs to Nix (VITRUM_MANAGED=nix) has no checkout: update
+# says how it is updated instead, behind has nothing to count, and doctor
+# checks what runs without the installer. Snapshots work as everywhere.
 set -uo pipefail
 
 STATE="${XDG_DATA_HOME:-$HOME/.local/share}/vitrum"
@@ -29,6 +33,17 @@ PATHS=(.config/vitrum .config/quickshell/vitrum .config/kitty .config/fish .conf
 
 say() { printf '%s\n' "$*"; }
 die() { printf 'vitrum: %s\n' "$*" >&2; exit 1; }
+
+# Read-only in the Nix store, updated through the flake input: nothing here
+# may look for a checkout, even one an earlier install recorded.
+managed() { [[ "${VITRUM_MANAGED:-}" == nix ]]; }
+# The version a managed install runs: what the package says, else the file
+# the installer writes.
+managed_version() {
+  local v="${VITRUM_VERSION:-}"
+  [[ -n "$v" ]] || v="$(head -n 1 "$STATE/version" 2>/dev/null | tr -d '[:space:]')"
+  printf '%s\n' "$v"
+}
 
 source_dir() {
   local s; s="$(cat "$STATE/source" 2>/dev/null)" || true
@@ -116,6 +131,15 @@ version_at() {
 # check already fetched, and stay empty when it could not.
 behind() {
   local src n=0 err="" log="" installed="" remote="" base
+  if managed; then
+    # The same shape, with nothing behind and no error: the shell stays quiet.
+    if [[ "${1:-}" == "--json" ]]; then
+      python3 -c 'import json, sys; print(json.dumps({"behind": 0, "commits": [], "url": "", "installed": sys.argv[1], "remote": "", "managed": "nix"}, indent=1))' "$(managed_version)"
+    else
+      say "vitrum is installed by Nix: there is no checkout to compare (see vitrum update)"
+    fi
+    return 0
+  fi
   src="$(source_dir)" || exit 1
   if ! git -C "$src" rev-parse --git-dir >/dev/null 2>&1; then err="not a git checkout"
   else
@@ -157,6 +181,14 @@ installed_revision() {
 }
 
 update() {
+  if managed; then
+    local v; v="$(managed_version)"
+    say "vitrum${v:+ $v} is installed by Nix: it is updated with your system, not from here."
+    say "Update the vitrum input of your flake, then rebuild:"
+    say "  nix flake update vitrum    (the name your flake gives the input)"
+    say "  sudo nixos-rebuild switch  (or home-manager switch)"
+    exit 0
+  fi
   local src; src="$(source_dir)" || exit 1
   if ! git -C "$src" rev-parse --git-dir >/dev/null 2>&1; then
     say "$src is not a git checkout — reinstalling it as it is"
@@ -193,12 +225,51 @@ update() {
   exec "$src/install.sh" --update "$@"
 }
 
+# doctor for an install the installer did not make: no checkout, packages or
+# stamps to check, only that what the desktop starts from is there. Failures
+# are what it cannot start without; exit status as the installer's doctor.
+doctor_managed() {
+  local fail=0 warn=0 bin f v
+  local libexec="${VITRUM_LIBEXEC:-/usr/local/libexec/vitrum}" config="${XDG_CONFIG_HOME:-$HOME/.config}"
+  ok()   { printf '  ok  %s\n' "$1"; }
+  bad()  { fail=$((fail + 1)); printf '  !!  %s — %s\n' "$1" "$2"; }
+  soft() { warn=$((warn + 1)); printf '  !   %s — %s\n' "$1" "$2"; }
+  v="$(managed_version)"
+  say "vitrum${v:+ $v}, installed by Nix"
+  if bin="$(command -v niri 2>/dev/null)"; then
+    if f="$("$bin" --version 2>/dev/null | head -n 1)" && [[ -n "$f" ]]; then ok "niri: $f"; else bad "niri" "$bin does not start"; fi
+  else bad "niri" "not on the PATH"; fi
+  if command -v qs >/dev/null 2>&1 || command -v quickshell >/dev/null 2>&1; then ok "quickshell"; else bad "quickshell" "neither qs nor quickshell is on the PATH"; fi
+  if [[ -e "$config/quickshell/vitrum/shell.qml" ]]; then ok "shell files"; else bad "shell files" "missing: $config/quickshell/vitrum/shell.qml"; fi
+  # What vitrum-setup makes in your home at login: niri starts from it.
+  if [[ -f "$config/vitrum/niri/config.kdl" ]]; then ok "niri config"
+  else bad "niri config" "missing: $config/vitrum/niri/config.kdl — run vitrum-setup (its log: $STATE/setup.log)"; fi
+  for f in vitrum-ipc vitrum-theme; do
+    if command -v "$f" >/dev/null 2>&1; then ok "$f"; else bad "$f" "not on the PATH"; fi
+  done
+  for f in settings disks about; do
+    if [[ -e "$config/quickshell/vitrum-$f/shell.qml" ]] && command -v "vitrum-$f" >/dev/null 2>&1; then ok "vitrum-$f"
+    else soft "vitrum-$f" "its files ($config/quickshell/vitrum-$f) or its launcher are missing"; fi
+  done
+  if [[ -x "$libexec/vitrum-root" ]]; then ok "root helper"; else soft "root helper" "missing: $libexec/vitrum-root (WireGuard, SMART, the login screen's look)"; fi
+  if [[ -x "$libexec/vitrum-portal" ]]; then ok "screen-share portal"; else soft "screen-share portal" "missing: $libexec/vitrum-portal"; fi
+  if command -v fc-list >/dev/null 2>&1; then
+    local fonts; fonts="$(fc-list 2>/dev/null)" || true
+    for f in "Inter" "JetBrains Mono" "Phosphor-Light" "Phosphor-Fill"; do
+      if grep -q "$f" <<<"$fonts"; then ok "font: $f"; else soft "font: $f" "not found by fontconfig"; fi
+    done
+  fi
+  say ""
+  if (( fail > 0 )); then say "$fail failed, $warn warning(s)"; return 1; fi
+  say "nothing failed, $warn warning(s)"
+}
+
 case "${1:-help}" in
   update)    shift; update "$@" ;;
   behind)    shift; behind "${1:-}" ;;
   snapshot)  shift; [[ "${2:-}" == "--unless-within" ]] && snapshot "${1:-}" "${3:-0}" || snapshot "${1:-}" ;;
   snapshots) snapshots ;;
   rollback)  shift; rollback "${1:-}" ;;
-  doctor)    shift; exec "$(source_dir)/install.sh" --doctor "$@" ;;
-  *)         sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//' ;;
+  doctor)    shift; if managed; then doctor_managed; exit $?; fi; exec "$(source_dir)/install.sh" --doctor "$@" ;;
+  *)         sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//' ;;
 esac

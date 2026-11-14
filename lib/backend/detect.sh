@@ -51,7 +51,36 @@ detect_init_backend() {
   else echo none; fi
 }
 
+# NixOS takes vitrum as a flake (flake.nix, nix/): its system is built from a
+# configuration, and an installer that writes into /usr/local and /etc has
+# nothing to write to. What to put in that configuration, in English like
+# get.sh: most of it is code.
+nixos_instructions() {
+  cat <<'TXT'
+vitrum on NixOS comes from its flake, not from this installer.
+
+In your system's flake.nix:
+
+  inputs.vitrum.url = "github:LanisOff/vitrum-shell";
+  inputs.vitrum.inputs.nixpkgs.follows = "nixpkgs";
+
+and in the machine's configuration:
+
+  imports = [ inputs.vitrum.nixosModules.default ];
+  programs.vitrum.enable = true;
+
+Then nixos-rebuild switch, and pick "vitrum" on the login screen.
+The README has the rest, under NixOS.
+TXT
+}
+
 load_backends() {
+  # Before anything is detected: nix is no package backend of this installer,
+  # and the unsupported-system message below would say nothing useful.
+  if _os_is nixos; then
+    nixos_instructions >&2
+    exit 1
+  fi
   PKG_BACKEND="$(detect_pkg_backend)"
   INIT_BACKEND="$(detect_init_backend)"
   case "$PKG_BACKEND+$INIT_BACKEND" in

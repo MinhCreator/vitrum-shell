@@ -67,7 +67,12 @@ Singleton {
             printf 'bios=%s\\n' "$(cat /sys/devices/virtual/dmi/id/bios_version 2>/dev/null)"
             printf 'serial=%s\\n' "$(cat /sys/devices/virtual/dmi/id/product_serial 2>/dev/null || echo unavailable)"
             printf 'niri=%s\\n' "$(niri --version 2>/dev/null | head -n1 | sed 's/^niri //')"
-            if [ -d /var/db/pkg ]; then printf 'packages=%s\\n' "$(ls -d /var/db/pkg/*/*/ 2>/dev/null | wc -l)"
+            if [ -e /etc/NIXOS ] && command -v nix-store >/dev/null; then
+                # The store paths behind the system profile and your own.
+                set -- /run/current-system/sw
+                for p in "/etc/profiles/per-user/$USER" "$HOME/.nix-profile"; do [ -e "$p" ] && set -- "$@" "$p"; done
+                printf 'packages=%s\\n' "$(nix-store -qR "$@" 2>/dev/null | sort -u | wc -l)"
+            elif [ -d /var/db/pkg ]; then printf 'packages=%s\\n' "$(ls -d /var/db/pkg/*/*/ 2>/dev/null | wc -l)"
             elif command -v pacman >/dev/null; then printf 'packages=%s\\n' "$(pacman -Qq 2>/dev/null | wc -l)"
             elif command -v xbps-query >/dev/null; then printf 'packages=%s\\n' "$(xbps-query -l 2>/dev/null | wc -l)"
             elif command -v rpm >/dev/null; then printf 'packages=%s\\n' "$(rpm -qa 2>/dev/null | wc -l)"

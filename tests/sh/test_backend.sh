@@ -878,3 +878,38 @@ test_runit_rc_local_dangling_symlink() {
   [[ -L "$VITRUM_ROOTFS/etc/rc.local" ]]
   assert_contains "$(cat "$VITRUM_ROOTFS/etc/rc.d/rc.local")" "rm -f /etc/runit/runsvdir/current/dhcpcd"
 }
+
+# ----------------------------------------------------------------- NixOS -----
+
+# NixOS takes vitrum as a flake: the installer says what to add and stops,
+# before the unsupported-system message and whatever package tool is on PATH.
+test_nixos_is_sent_to_the_flake() {
+  _clean_path; stub pacman; _os_release nixos; mkdir -p "$VITRUM_ROOTFS/run/systemd/system"; _load
+  local out rc=0
+  out="$( (load_backends) 2>&1 )" || rc=$?
+  assert_eq "$rc" 1
+  assert_contains "$out" 'inputs.vitrum.url = "github:LanisOff/vitrum-shell";'
+  assert_contains "$out" "imports = [ inputs.vitrum.nixosModules.default ];"
+  assert_contains "$out" "programs.vitrum.enable = true;"
+  [[ "$out" != *"unsupported system"* ]] || { echo "the unsupported-system message came too"; return 1; }
+}
+test_a_nixos_derivative_is_sent_to_the_flake() {
+  _clean_path; _os_release somenix "nixos"; _load
+  local out rc=0
+  out="$( (load_backends) 2>&1 )" || rc=$?
+  assert_eq "$rc" 1
+  assert_contains "$out" "programs.vitrum.enable = true;"
+}
+test_other_systems_never_see_the_nixos_message() {
+  _clean_path; stub dnf; _os_release fedora; mkdir -p "$VITRUM_ROOTFS/run/systemd/system"; _load
+  load_backends
+  assert_eq "$PKG_BACKEND+$INIT_BACKEND" "dnf+systemd"
+}
+# get.sh carries the same words (it runs before there is a checkout to read
+# them from): one changed without the other fails here.
+test_nixos_message_is_the_same_in_get_sh() {
+  _load
+  local theirs
+  theirs="$(awk "/^  cat >&2 <<'TXT'\$/ { on = 1; next } /^TXT\$/ { on = 0 } on" "$VITRUM_DIR/get.sh")"
+  assert_eq "$theirs" "$(nixos_instructions)"
+}

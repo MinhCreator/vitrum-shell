@@ -8,6 +8,14 @@ sys.path.insert(0, str(ROOT / "tools"))
 import vitrum_portal as P  # noqa: E402
 
 
+class Ipc(unittest.TestCase):
+    def test_the_environment_then_the_path_then_the_installers_place(self):
+        found = {"vitrum-ipc": "/run/current-system/sw/bin/vitrum-ipc"}.get
+        self.assertEqual(P.ipc_command({"VITRUM_IPC": "/x/ipc", "HOME": "/home/u"}, found), "/x/ipc")
+        self.assertEqual(P.ipc_command({"HOME": "/home/u"}, found), "/run/current-system/sw/bin/vitrum-ipc")
+        self.assertEqual(P.ipc_command({"HOME": "/home/u"}, lambda c: None), "/home/u/.local/bin/vitrum-ipc")
+
+
 class CursorModes(unittest.TestCase):
     def test_portal_bits_to_mutter(self):
         # portal: 1 hidden, 2 embedded, 4 metadata — mutter: 0, 1, 2

@@ -42,7 +42,9 @@ Page {
         onLoadFailed: if (editor.text === page.loaded) { editor.text = "{}\n"; page.loaded = editor.text; }
     }
 
+    // Not with Nix: there is no checkout to compare, the flake input is updated.
     Section {
+        visible: Paths.managed === ""
         title: "vitrum updates"
         note: "From the repository vitrum was installed from (vitrum update). Nothing is pulled until you press Update."
         SettingToggle { key: "updates.vitrum.check"; label: "Check for new versions"; hint: "Quietly, every few hours. An island appears in the bar when there is enough new." }

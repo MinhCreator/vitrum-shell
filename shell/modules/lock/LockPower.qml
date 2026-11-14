@@ -7,8 +7,9 @@ import "root:/lib/lock.js" as Lib
 // Sleep, restart, power off: square glass tiles (Tokens.radiusTile) with a
 // line icon each. Under the pointer a tile lifts and its name grows out of it.
 // Sleep acts at once; restart and power off need a second press within three
-// seconds: the first one arms the tile — the danger tint fades in and sweeps
-// across once, and a short label says to press again.
+// seconds: the first one arms the tile — it lights up (lit glass, the light
+// under it and its icon in Colors.danger), a light passes across it once, and
+// a short label says to press again.
 Row {
     id: power
     spacing: Tokens.gap
@@ -46,14 +47,14 @@ Row {
             radius: Tokens.radiusTile
             width: height + (open ? label.implicitWidth + Tokens.padding : 0)
             clip: true
-            tint: m.pressed ? Colors.alpha(Colors.text, 0.20) : m.containsMouse ? Colors.alpha(Colors.text, 0.13) : Qt.rgba(1, 1, 1, Colors.dark ? 0.07 : 0.16)
+            tint: m.pressed ? Colors.alpha(Colors.text, 0.20) : m.containsMouse ? Colors.alpha(Colors.text, 0.13) : btn.rest
             edgeLight: m.containsMouse ? 0.75 : 0.5
             Behavior on width { enabled: Motion.enabled; SpringAnim { token: Motion.smooth } }
             Behavior on tint { enabled: Motion.enabled; ColorAnim {} }
             Behavior on edgeLight { enabled: Motion.enabled; EaseAnim {} }
             scale: m.pressed ? 0.97 : 1
             Behavior on scale { enabled: Motion.enabled; SpringAnim { token: Motion.snappy } }
-            // Armed: Colors.danger and its pair.
+            // Armed: lit glass, its light in Colors.danger.
             ShellTint {
                 anchors.fill: parent
                 radius: btn.radius
@@ -66,7 +67,7 @@ Row {
                 anchors.verticalCenter: parent.verticalCenter
                 x: (btn.height - Tokens.iconSize) / 2
                 spacing: Tokens.gap
-                Icon { name: btn.modelData.icon; size: Tokens.iconSize; anchors.verticalCenter: parent.verticalCenter }
+                Icon { name: btn.modelData.icon; size: Tokens.iconSize; color: btn.armed ? Colors.danger : Colors.text; anchors.verticalCenter: parent.verticalCenter }
                 Label {
                     id: label
                     text: Lib.powerLabel(btn.modelData.action, btn.armed)

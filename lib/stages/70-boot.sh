@@ -60,6 +60,14 @@ _boot_sddm() {
   run sudo install -m 644 "$VITRUM_DIR/assets/sddm/vitrum/Main.qml" "$VITRUM_DIR/assets/sddm/vitrum/metadata.desktop" "$SDDM_THEME/"
   # The shell's own glass and its tint (plain QtQuick) and the glass's compiled shader, as they are.
   run sudo install -m 644 "$VITRUM_DIR/shell/components/Glass.qml" "$VITRUM_DIR/shell/components/Tint.qml" "$VITRUM_DIR/shell/components/glass.frag.qsb" "$SDDM_THEME/"
+  # The lock's own words, entrance and refusal timings, and the motion maths
+  # (plain JavaScript, no imports): one source for the lock and the login.
+  run sudo install -m 644 "$VITRUM_DIR/shell/lib/lock.js" "$VITRUM_DIR/shell/lib/motion.js" "$SDDM_THEME/"
+  # The line icons (the fonts stage fetched them): the greeter cannot see a
+  # user's fonts, so it loads its own copy. Without it the theme uses words.
+  local icons="$HOME/.local/share/fonts/vitrum/Phosphor-Light.ttf"
+  if [[ -f "$icons" ]]; then run sudo install -m 644 "$icons" "$SDDM_THEME/"
+  else info "no Phosphor-Light.ttf (the fonts stage fetches it): the login screen will use words for its icons"; fi
 
   # The desktop's wallpaper (an image; a video gives no background).
   local wall bg=""

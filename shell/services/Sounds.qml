@@ -31,9 +31,10 @@ Singleton {
 
     function play(event) {
         if (!Settings.get("sounds." + (setting[event] || event), false)) return;
-        // An emptied field in Settings is the default folder, not none.
-        const dir = Settings.get("sounds.theme", "") || "/usr/share/sounds/freedesktop/stereo";
-        const p = player.createObject(root, { command: ["sh", "-c", "f=\"$1\"; for e in oga ogg wav; do [ -f \"$f.$e\" ] && exec pw-play \"$f.$e\"; done", "_", dir + "/" + files[event]] });
+        // An emptied field in Settings is the default folder, not none; and the
+        // default is the freedesktop theme wherever the system has it.
+        const from = Paths.soundDirs(Settings.get("sounds.theme", "")).map(d => d + "/" + files[event]);
+        const p = player.createObject(root, { command: ["sh", "-c", "for f; do for e in oga ogg wav; do [ -f \"$f.$e\" ] && exec pw-play \"$f.$e\"; done; done", "_"].concat(from) });
         p.exited.connect(() => p.destroy());
         p.running = true;
     }

@@ -13,10 +13,14 @@ import "../lib/vitrumupdate.js" as Lib
  * (updates.vitrum.threshold) or a major version is out (lib/vitrumupdate.js);
  * its panel lists the commits, however few, and runs vitrum update in a
  * terminal.
+ *
+ * An install that belongs to Nix (Paths.managed) has no checkout to compare
+ * and is updated with the system: nothing is checked, the island never shows.
  */
 Singleton {
     id: root
-    readonly property bool enabled: Settings.get("updates.vitrum.check", true)
+    readonly property bool managed: Paths.managed !== ""
+    readonly property bool enabled: !managed && Settings.get("updates.vitrum.check", true)
     readonly property int threshold: Math.max(1, Settings.get("updates.vitrum.threshold", 5))
     readonly property real hours: Math.max(1, Settings.get("updates.vitrum.hours", 6))
 
@@ -34,7 +38,7 @@ Singleton {
     readonly property string title: Lib.title(notice, behind)
 
     function check() {
-        if (checking) return;
+        if (checking || managed) return;
         checking = true;
         proc.running = true;
     }

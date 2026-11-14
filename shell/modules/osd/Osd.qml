@@ -6,37 +6,27 @@ import qs.theme
 import qs.components
 
 /*
- * On-screen display: a glass island at the top centre, under the bar, on
- * the focused screen; the value is a tinted meter. Volume, microphone, brightness, keyboard layout — shown
- * when the value changes, gone 1.2 s after the last change.
+ * The on-screen display where the bar cannot be seen: over a game or a
+ * fullscreen window the bar's own drop (Bar.qml) would be under it (and under
+ * the dock, when the bar is at the bottom and the dock shows), so this
+ * overlay shows the same content (OsdContent) as a piece of glass of its own,
+ * where the drop would hang. OsdState decides which of the two shows.
+ *
+ * Always mapped, with a 1 px region and mask while it shows nothing.
  */
 PanelWindow {
     id: root
     required property var modelData
     screen: modelData
-    readonly property bool here: screen.name === (Niri.focusedOutput || Quickshell.screens[0].name)
-
-    property string kind: ""            // volume | mic | brightness | layout
-    property bool showing: false
-    function show(k) { if (!here) return; kind = k; showing = true; hide.restart(); }
-    Timer { id: hide; interval: 1200; onTriggered: root.showing = false }
-
-    // Changes after startup only (the first values are not news).
-    property bool armed: false
-    Timer { interval: 1500; running: true; onTriggered: root.armed = true }
-    Connections { target: Audio; enabled: root.armed
-        function onVolumeChanged() { root.show("volume"); }
-        function onMutedChanged() { root.show("volume"); }
-        function onMicMutedChanged() { root.show("mic"); } }
-    Connections { target: Power; enabled: root.armed; function onBrightnessChanged() { root.show("brightness"); } }
-    Connections { target: Layouts; enabled: root.armed && !Layouts.held; function onIndexChanged() { root.show("layout"); } }
-    Connections { target: UiState; function onOsdRequested(k) { root.show(k); } }
+    readonly property bool showing: OsdState.place(modelData.name) === "window"
 
     visible: true
-    anchors { top: Settings.get("bar.position", "top") === "top"; bottom: Settings.get("bar.position", "top") !== "top" }
-    margins { top: Tokens.islandHeight + 3 * Tokens.gap; bottom: Tokens.islandHeight + 3 * Tokens.gap }
+    readonly property bool atTop: Settings.get("bar.position", "top") === "top"
+    anchors { top: atTop; bottom: !atTop }
+    // Over a dock that stands on a bottom bar: above the dock.
+    margins { top: Tokens.islandHeight + 3 * Tokens.gap; bottom: Tokens.islandHeight + 3 * Tokens.gap + OsdState.dockOver(modelData.name) }
     exclusionMode: ExclusionMode.Ignore
-    implicitWidth: Tokens.islandHeight * 9
+    implicitWidth: osdContent.implicitWidth + 2 * Tokens.padding
     implicitHeight: Tokens.islandHeight + 4
     color: "transparent"
     WlrLayershell.namespace: "vitrum-osd"
@@ -49,41 +39,17 @@ PanelWindow {
     Item { id: dot; x: 2; y: 2; width: 1; height: 1 }
     Item { id: shape; x: pill.x; y: pill.y; width: pill.width; height: pill.height }
 
-    readonly property real value: kind === "volume" ? Audio.volume : kind === "mic" ? Audio.micVolume
-                                  : kind === "brightness" ? Power.brightness : 0
-    readonly property string iconName: kind === "volume" ? (Audio.muted ? "volume-mute" : Audio.volume < 0.4 ? "volume-low" : "volume-high")
-                                     : kind === "mic" ? (Audio.micMuted ? "mic-off" : "mic")
-                                     : kind === "brightness" ? "brightness" : "keyboard"
-
     Surface {
         id: pill
         group: "osd"
         width: parent.width
         height: Tokens.islandHeight
         radius: Tokens.radiusIsland
-        y: root.showing ? 2 : -height
+        y: root.showing ? 2 : root.atTop ? -height : root.height   // in from the bar's side
         opacity: root.showing ? 1 : 0
         Behavior on y { enabled: Motion.enabled; SpringAnim { token: Motion.snappy } }
         Behavior on opacity { enabled: Motion.enabled; EaseAnim { duration: Motion.fast } }
 
-        Row {
-            anchors.fill: parent
-            anchors.leftMargin: Tokens.padding; anchors.rightMargin: Tokens.padding
-            spacing: Tokens.gap
-            Icon { name: root.iconName; anchors.verticalCenter: parent.verticalCenter; color: Colors.accent }
-            Meter {
-                visible: root.kind !== "layout"
-                width: parent.width - Tokens.iconSize * 4.5 - 2 * Tokens.gap
-                anchors.verticalCenter: parent.verticalCenter
-                value: root.value
-            }
-            Label {
-                anchors.verticalCenter: parent.verticalCenter
-                numeric: true
-                text: root.kind === "layout" ? Layouts.current
-                    : (root.kind === "volume" && Audio.muted) || (root.kind === "mic" && Audio.micMuted) ? "muted"
-                    : Math.round(root.value * 100) + "%"
-            }
-        }
+        OsdContent { id: osdContent; anchors.centerIn: parent; group: "osd" }
     }
 }

@@ -78,7 +78,7 @@ OBJECTISH = {"ShellRoot", "Singleton", "Scope", "QtObject", "WlSessionLock", "Va
 
 ITEM = set("""x y z width height implicitWidth implicitHeight anchors opacity visible enabled
 clip rotation scale transform transformOrigin smooth antialiasing focus activeFocus
-states transitions state layer parent children data resources baselineOffset
+activeFocusOnTab states transitions state layer parent children data resources baselineOffset
 childrenRect containmentMask objectName""".split())
 BASES = {
     "Item": ITEM,
@@ -270,6 +270,10 @@ def reachable_dirs(path, raw, root):
     # sibling type is "not a type" there. Kept narrow: only files directly inside
     # a directory named `panes`; files referenced as types keep their directory.
     dirs = set() if os.path.basename(here) == "panes" else {os.path.realpath(here)}
+    # The SDDM theme is installed flat: the boot stage puts the shell's Glass and
+    # Tint (and their shader) beside its Main.qml, so there they are siblings.
+    if os.path.basename(os.path.dirname(here)) == "sddm":
+        dirs.add(os.path.realpath(os.path.join(here, "..", "..", "..", "shell", "components")))
     # realpath: the apps reach the shell's directories through symlinks.
     for mod in re.findall(r"^\s*import\s+qs\.([\w.]+)", raw, re.M):
         dirs.add(os.path.realpath(os.path.join(root, *mod.split("."))))

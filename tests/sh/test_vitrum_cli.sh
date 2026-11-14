@@ -262,3 +262,48 @@ test_snapshot_stamp_needs_vitrum_test() {
   VITRUM_SNAPSHOT_STAMP=20260101-000000 env -u VITRUM_TEST "$V" snapshot >/dev/null
   [[ ! -e "$XDG_DATA_HOME/vitrum/snapshots/20260101-000000.tar.gz" ]] || { echo "the stamp was honoured outside the tests"; return 1; }
 }
+
+# An install that belongs to Nix (VITRUM_MANAGED=nix): no checkout, read-only.
+# A checkout an earlier install recorded must be left alone too.
+test_managed_update_says_how_and_touches_nothing() {
+  _lonely
+  out="$(VITRUM_MANAGED=nix VITRUM_VERSION=0.7.0 "$V" update 2>&1)" || { echo "update should exit 0"; return 1; }
+  assert_contains "$out" "vitrum 0.7.0 is installed by Nix"
+  assert_contains "$out" "flake"
+  [[ ! -e "$HOME/installs" ]]
+  ! git -C "$HOME/lonely" remote get-url origin >/dev/null 2>&1 || { echo "an origin was added"; return 1; }
+}
+test_managed_behind_is_not_behind_in_the_same_shape() {
+  out="$(VITRUM_MANAGED=nix VITRUM_VERSION=0.7.0 "$V" behind --json)" || { echo "behind should exit 0"; return 1; }
+  python3 - "$out" <<'PY'
+import json, sys
+d = json.loads(sys.argv[1])
+assert d == {"behind": 0, "commits": [], "url": "", "installed": "0.7.0", "remote": "", "managed": "nix"}, d
+PY
+  assert_contains "$(VITRUM_MANAGED=nix "$V" behind)" "installed by Nix"
+}
+test_managed_version_falls_back_to_the_installers_file() {
+  mkdir -p "$XDG_DATA_HOME/vitrum"; echo "0.6.4" > "$XDG_DATA_HOME/vitrum/version"
+  assert_contains "$(VITRUM_MANAGED=nix "$V" behind --json)" '"installed": "0.6.4"'
+  assert_contains "$(VITRUM_MANAGED=nix VITRUM_VERSION=0.7.0 "$V" behind --json)" '"installed": "0.7.0"'
+}
+test_managed_doctor_checks_without_a_checkout() {
+  out="$(VITRUM_MANAGED=nix VITRUM_LIBEXEC="$HOME/libexec" "$V" doctor 2>&1)" && { echo "nothing is installed: doctor should fail"; return 1; }
+  assert_contains "$out" "installed by Nix"
+  assert_contains "$out" "missing: $XDG_CONFIG_HOME/quickshell/vitrum/shell.qml"
+  ! grep -q "do not know where vitrum was installed from" <<<"$out"
+  stub niri 'echo "niri 25.08"'; stub qs; stub vitrum-ipc; stub vitrum-theme
+  mkdir -p "$XDG_CONFIG_HOME/quickshell/vitrum" "$HOME/libexec"; : > "$XDG_CONFIG_HOME/quickshell/vitrum/shell.qml"
+  # What vitrum-setup makes at login; without it the doctor says to run it.
+  mkdir -p "$XDG_CONFIG_HOME/vitrum/niri"; : > "$XDG_CONFIG_HOME/vitrum/niri/config.kdl"
+  printf '#!/bin/sh\n' > "$HOME/libexec/vitrum-root"; chmod +x "$HOME/libexec/vitrum-root"
+  out="$(VITRUM_MANAGED=nix VITRUM_LIBEXEC="$HOME/libexec" "$V" doctor 2>&1)" || { echo "doctor should pass: $out"; return 1; }
+  assert_contains "$out" "ok  niri: niri 25.08"
+  assert_contains "$out" "ok  root helper"
+  assert_contains "$out" "missing: $HOME/libexec/vitrum-portal"
+}
+# Any other value is not a manager vitrum knows: the installer's way.
+test_unknown_manager_is_the_installers_way() {
+  out="$(VITRUM_MANAGED=yes "$V" update 2>&1)" && return 1
+  assert_contains "$out" "do not know where vitrum was installed from"
+}

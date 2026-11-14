@@ -1,25 +1,26 @@
 import QtQuick
-import QtQuick.Shapes
 import Quickshell
 import Quickshell.Wayland
 import qs.services
 import qs.theme
 import qs.components
+import qs.modules.osd
 import "../../lib/bar.js" as BarLib
-import "../../lib/drop.js" as Drop
+import "../../lib/osd.js" as OsdLib
 
 /*
  * The bar of one screen, and the panels that flow out of it.
  *
  * One full-screen, transparent layer surface holds the islands, the activity
- * islands (a timer, a recording: there only while it runs) and the open panel;
- * BarReserve, a second, empty surface, reserves the space. Only the islands
- * and an open panel take input (mask).
+ * islands (a timer, a recording: there only while it runs), the open panel
+ * and the on-screen display; BarReserve, a second, empty surface, reserves the
+ * space. Only the islands and an open panel take input (mask).
  *
  * With glass on the bar and a niri that has shaped glass (Materials.shaped),
  * the effect region is plain rectangles and niri rounds them: every island is
  * its own lens, and an open panel hangs from its island on a short neck,
- * melted into one drop by niri's fillets (lib/drop.js has the geometry).
+ * melted into one drop by niri's fillets (BarDrop; lib/drop.js has the
+ * geometry). The on-screen display is a second, small drop of the same kind.
  * Without it every piece is its own rounded region, as before.
  *
  *   panels: { name: Component }   what each UiState.panel name shows
@@ -113,7 +114,7 @@ PanelWindow {
                 screen: bar.screen
                 primary: bar.primary
                 shaped: bar.shaped
-                merged: bar.shaped && bar.source === this && bar.t > 0.02
+                merged: bar.shaped && ((bar.source === this && bar.t > 0.02) || (bar.osdSource === this && bar.osdShown && bar.osdT > 0.02))
                 onVisibleChanged: Qt.callLater(bar._collect)
                 Component.onCompleted: bar._collect()
             }
@@ -208,43 +209,22 @@ PanelWindow {
     Behavior on aw { enabled: bar.easeSize; NumberAnimation { duration: Motion.standard; easing.type: Easing.OutCubic } }
     Behavior on ah { enabled: bar.easeSize; NumberAnimation { duration: Motion.standard; easing.type: Easing.OutCubic } }
 
-    readonly property var islandFrame: ({ x: ix, y: Tokens.gap, w: iw, h: Tokens.islandHeight })
-    readonly property var geo: Drop.dropGeometry(islandFrame, { x: tx, w: aw, h: ah }, t, Tokens.gap)
-    readonly property var neckRect: Drop.mirrorRect(geo.neck, !atTop, height)
-    readonly property var sheetRect: Drop.mirrorRect(geo.sheet, !atTop, height)
-
-    // The tint along the drop's outline (shaped glass), under everything else.
-    Shape {
-        anchors.fill: parent
-        z: -1
-        visible: bar.shaped && bar.dropShown
-        ShapePath {
-            strokeWidth: 0
-            strokeColor: "transparent"
-            fillColor: Materials.fill("bar", 0, bar.modelData.name)
-            PathSvg { path: bar.shaped && bar.dropShown ? Drop.dropPath(bar.islandFrame, bar.geo.sheet, bar.pieceRadius, bar.fillet, !bar.atTop, bar.height) : "" }
-        }
-    }
-
-    Item { id: neck; x: bar.neckRect.x; y: bar.neckRect.y; width: bar.neckRect.w; height: bar.neckRect.h }
-
     MouseArea { id: catcher; anchors.fill: parent; enabled: bar.open; onClicked: UiState.closePanel() }
 
-    Item {
-        id: sheet
+    BarDrop {
+        id: panelDrop
+        anchors.fill: parent
         z: 1
-        x: bar.sheetRect.x; y: bar.sheetRect.y
-        width: bar.sheetRect.w; height: bar.sheetRect.h
-        visible: bar.dropShown
-        clip: true
+        t: bar.t
+        shown: bar.dropShown
+        shaped: bar.shaped
+        atTop: bar.atTop
+        screenName: bar.modelData.name
+        pieceRadius: bar.pieceRadius
+        fillet: bar.fillet
+        islandX: bar.ix; islandW: bar.iw
+        targetX: bar.tx; targetW: bar.aw; targetH: bar.ah
 
-        // Without shaped glass the sheet is its own rounded surface.
-        Surface {
-            anchors.fill: parent
-            visible: !bar.shaped
-            group: "bar"
-            radius: Math.min(Tokens.radiusPanel, width / 2, height / 2)
-        }
         MouseArea { anchors.fill: parent }   // clicks inside do not close
 
         Loader {
@@ -252,9 +232,72 @@ PanelWindow {
             x: Tokens.padding
             // Pinned to the far edge of the sheet from the bar: content slides
             // out of the island rather than being uncovered top-down.
-            y: bar.atTop ? sheet.height - bar.ah + Tokens.padding : Tokens.padding
+            y: bar.atTop ? panelDrop.sheet.height - bar.ah + Tokens.padding : Tokens.padding
             sourceComponent: bar.panels[bar.shown] || null
             opacity: bar.open && bar.t > 0.55 ? 1 : 0
+            Behavior on opacity { enabled: Motion.enabled; EaseAnim { duration: Motion.fast } }
+        }
+    }
+    readonly property var geo: panelDrop.geo
+
+    // ----------------------------------------------- on-screen display ---
+    // Volume, microphone, brightness, keyboard layout (OsdState): a small drop
+    // out of the centre island, the bar's own glass, for as long as OsdState
+    // shows it here. It takes no input and no focus. Where this bar cannot be
+    // seen the overlay window shows it instead (modules/osd/Osd.qml).
+    //
+    // The island over the centre row's middle; none there: the sheet alone,
+    // under the bar's middle.
+    readonly property Item osdSource: {
+        const row = islands.filter(i => i.parent === center && i.active);
+        const k = OsdLib.middle(row.map(i => ({ x: i.x, w: i.width })), center.width / 2);
+        return k >= 0 ? row[k] : null;
+    }
+    readonly property real osdIx: osdSource ? center.x + osdSource.x : Math.round(width / 2) - 60
+    readonly property real osdIw: osdSource ? osdSource.width : 120
+    readonly property real osdW: osdContent.implicitWidth + 2 * Tokens.padding
+    readonly property real osdX: OsdLib.centred(osdIx, osdIw, osdW, width, Tokens.gap)
+    // A panel hanging from the same island, or in the way: no drop (the volume
+    // panel has its own slider).
+    readonly property bool osdBlocked: OsdLib.blocked(open || closing, source === osdSource, { x: tx, w: tw }, { x: osdX, w: osdW }, Tokens.gap)
+    readonly property bool osdOn: OsdState.place(modelData.name) === "bar" && !osdBlocked
+    // Its own progress, like a panel's but quicker. Another kind while it
+    // shows changes only the content (OsdContent), not this.
+    property real osdT: osdOn ? 1 : 0
+    Behavior on osdT {
+        enabled: Motion.enabled
+        NumberAnimation {
+            duration: bar.osdOn ? Motion.standard : Motion.fast
+            easing.type: bar.osdOn ? Easing.OutQuint : Easing.InOutCubic
+        }
+    }
+    // Gone at once when a panel takes its place: two drops never share an island.
+    readonly property bool osdShown: osdT > 0.001 && !osdBlocked
+
+    BarDrop {
+        id: osdDrop
+        anchors.fill: parent
+        z: 1
+        t: bar.osdT
+        shown: bar.osdShown
+        shaped: bar.shaped
+        atTop: bar.atTop
+        screenName: bar.modelData.name
+        pieceRadius: bar.pieceRadius
+        fillet: bar.fillet
+        islandX: bar.osdIx; islandW: bar.osdIw
+        targetX: bar.osdX; targetW: bar.osdW; targetH: Tokens.islandHeight
+        radius: Tokens.islandRadius
+        narrow: true
+        detached: !bar.osdSource
+
+        OsdContent {
+            id: osdContent
+            group: "bar"
+            x: Math.round((osdDrop.sheet.width - width) / 2)
+            // Pinned to the far edge from the bar, as a panel's content is.
+            y: bar.atTop ? osdDrop.sheet.height - height : 0
+            opacity: bar.osdOn && bar.osdT > 0.55 ? 1 : 0
             Behavior on opacity { enabled: Motion.enabled; EaseAnim { duration: Motion.fast } }
         }
     }
@@ -262,11 +305,9 @@ PanelWindow {
     // ------------------------------------------------- regions and input ---
     Item { id: dotItem; width: 1; height: 1 }
     Region { id: dotRegion; item: dotItem }
-    Region { id: neckRegion; item: neck }
-    Region { id: sheetRegion; item: sheet; radius: bar.shaped ? 0 : Math.min(Tokens.radiusPanel, sheet.width / 2, sheet.height / 2) }
     Region { id: catcherRegion; item: catcher }
 
-    readonly property var dropRegions: !dropShown ? [] : shaped ? [neckRegion, sheetRegion] : [sheetRegion]
+    readonly property var dropRegions: panelDrop.regions.concat(osdDrop.regions)
     // Never an empty region: niri would apply the effect to the whole surface.
     Region {
         id: effectRegion
@@ -278,8 +319,9 @@ PanelWindow {
     BlurKick { id: blurKick; window: bar }
     BackgroundEffect.blurRegion: Materials.wantsRegion("bar", blurKick.screen) && !blurKick.on ? effectRegion : blurKick.none
 
+    // The on-screen display is never in it.
     mask: Region {
-        regions: bar.open ? bar.islandRegions.concat([catcherRegion]) : bar.closing ? bar.islandRegions.concat([sheetRegion]) : bar.islandRegions
+        regions: bar.open ? bar.islandRegions.concat([catcherRegion]) : bar.closing ? bar.islandRegions.concat([panelDrop.sheetRegion]) : bar.islandRegions
     }
 
     Item {
@@ -293,6 +335,7 @@ PanelWindow {
             const d = Object.assign({}, UiState.barDebug);
             d[bar.modelData.name] = { open: bar.open, closing: bar.closing, shown: bar.shown, t: bar.t, shaped: bar.shaped,
                                       source: !!bar.source, geo: bar.geo, islands: bar.islands.length, w: bar.width, h: bar.height,
+                                      osd: { on: bar.osdOn, t: bar.osdT, blocked: bar.osdBlocked, source: !!bar.osdSource, geo: osdDrop.geo },
                                       // Which objects hold which modules: the same address after a change = kept.
                                       layout: bar.layout, pieces: bar.islands.map(i => i.probe()) };
             UiState.barDebug = d;

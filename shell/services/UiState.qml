@@ -39,6 +39,8 @@ Singleton {
     property string dockState: ""
     /// The keybind sheet (Mod+/).
     property bool keybinds: false
+    /// The full-screen player (Mod+Alt+M, or the button on the bar's player).
+    property bool player: false
     /// The welcome tour (the installer's marker, or vitrum-ipc welcome open).
     property bool welcome: false
     /// The open tour's step (vitrum-ipc welcome step), and a move asked for from
@@ -75,7 +77,7 @@ Singleton {
     }
     function closePanel() { panel = ""; }
 
-    function closeOverlays() { launcher = false; switcher = false; capture = false; power = false; wallpaperPicker = false; keybinds = false; welcome = false; }
+    function closeOverlays() { launcher = false; switcher = false; capture = false; power = false; wallpaperPicker = false; keybinds = false; welcome = false; player = false; }
     function toggle(name) {
         const was = root[name];
         closePanel(); closeOverlays();

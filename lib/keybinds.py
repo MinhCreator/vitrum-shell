@@ -257,6 +257,7 @@ A = {
     "next track keyboard":                   ("shell", "media next"),
     "previous track":                        ("shell", "media prev"),
     "previous track keyboard":               ("shell", "media prev"),
+    "full screen player":                    ("shell", "player toggle"),
     "brightness up":                         ("shell", "osd brightness up"),
     "brightness down":                       ("shell", "osd brightness down"),
 }

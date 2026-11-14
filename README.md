@@ -146,6 +146,7 @@ cd vitrum-shell
 > Runs on Arch with systemd (CachyOS and other Arch-based systems too),
 > Gentoo with OpenRC or systemd, Fedora 43 or newer with systemd (tested on
 > 44), and Void (glibc, not musl) with runit and elogind. NVIDIA works.
+> NixOS has its own way in, as a flake: see [NixOS](#nixos) below.
 
 > [!NOTE]
 > The installer backs up every file it replaces, and asks before it makes
@@ -209,6 +210,94 @@ Once you're in:
 
 The rest is in [KEYBINDS.md](KEYBINDS.md). Settings are also plain text in
 `~/.config/vitrum/settings.json`.
+
+### NixOS
+
+On NixOS vitrum is a flake, not the installer. It brings niri with the glass
+patches, the shell and a module for the system. Add it to your system's
+`flake.nix`:
+
+```nix
+{
+  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+  inputs.vitrum.url = "github:LanisOff/vitrum-shell";
+  inputs.vitrum.inputs.nixpkgs.follows = "nixpkgs";
+
+  outputs = { nixpkgs, vitrum, ... }@inputs: {
+    nixosConfigurations.my-machine = nixpkgs.lib.nixosSystem {
+      specialArgs = { inherit inputs; };
+      modules = [ ./configuration.nix ];
+    };
+  };
+}
+```
+
+and turn it on in the machine's configuration:
+
+```nix
+{ inputs, ... }:
+{
+  imports = [ inputs.vitrum.nixosModules.default ];
+  programs.vitrum.enable = true;
+}
+```
+
+Then `sudo nixos-rebuild switch --flake .#my-machine`, log out and pick
+**vitrum** on the login screen.
+
+> [!IMPORTANT]
+> vitrum needs a recent nixpkgs (Quickshell 0.3.1 or newer), so `nixos-unstable`
+> today. niri builds from source on the first switch, which takes 20 to 40
+> minutes, unless you have a cache that holds it.
+
+The module sets up what the installer does to a system: the session, SDDM with
+vitrum's login screen, PipeWire, NetworkManager, Bluetooth, the portals, the
+keyring, the fonts and the polkit rules. The services are defaults, so yours
+win where you already chose one. The parts you tick on the installer's choice
+screen are options here:
+
+| Option, under `programs.vitrum` | Default | What it adds |
+|---|---|---|
+| `sddm.enable` | on | The login screen |
+| `plymouth.enable` | off | The boot splash |
+| `inputMethod.enable` | off | Japanese, Korean and Chinese input (fcitx5) |
+| `liveWallpaper.enable` | on | Video wallpapers |
+| `phone.enable` | off | KDE Connect |
+| `tmux.enable` | on | tmux, themed |
+| `games.enable` | on | Game mode and MangoHud |
+| `utilities.enable` | on | Mic noise filter, VPN tools, sensors, mixer |
+| `cliTools.enable` | on | eza, bat, fzf, zoxide, delta |
+| `fileManager.enable` | on | Dolphin |
+| `ocr.enable` | on | Text from screenshots |
+| `vesktopTheme.enable` | on | The Vesktop theme, applied with `vitrum-vesktop-theme install` |
+| `appleEmoji.enable` | off | Apple Color Emoji (unfree, needs `allowUnfree`) |
+| `adminGroup` | `wheel` | Who uses VPN, disk health and Disk Utility without a password |
+
+Your own files stay ordinary files, as on every other distribution. At each
+login `vitrum-setup` makes what's missing in `~/.config` and
+`~/.local/share/vitrum` (the niri config, `settings.json`, the terminal's and
+the toolkits' themes) and points the shell's folders at the new package after
+an update. It never writes over your settings, `overrides.kdl` or widgets, and
+the Settings app works as usual. Run `vitrum-setup` by hand to do it without
+logging out (it also fetches the tmux plugins, which a login doesn't wait
+for); its last run is in `~/.local/share/vitrum/setup.log`.
+
+What's different from the other distributions:
+
+- **Updating** is `nix flake update vitrum` and a `nixos-rebuild switch`, then
+  a new login. `vitrum update` only says so, since there's no checkout to pull.
+  `vitrum snapshot` and `vitrum rollback` still save and restore your configs,
+  and the system itself rolls back the NixOS way.
+- **The Steam theme** isn't there: Millennium patches Steam's own files, which
+  NixOS doesn't allow.
+- **fish as your login shell** is yours to set (`users.users.<you>.shell =
+  pkgs.fish;`). kitty starts fish either way.
+- **Apple Color Emoji** is off unless you turn it on, and Noto Color Emoji
+  stands in.
+
+To look before you switch, the flake has a small system for a virtual machine:
+`nixos-rebuild build-vm --flake github:LanisOff/vitrum-shell#vm`, then
+`./result/bin/run-vitrum-vm` and log in as `vitrum` (password `vitrum`).
 
 ---
 

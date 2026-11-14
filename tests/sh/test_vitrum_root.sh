@@ -43,6 +43,32 @@ test_login_sync_copies_checked_files() {
   assert_eq "$(cat "$D/login.json")" '{"light": "07:12", "dark": "18:40", "font": "Inter", "h24": true}'
   assert_eq "$(cat "$D/palette.json")" '{"palette": {"dark": {"bg": "#101112", "accent": "#8ab4f8"}}}'
 }
+# How the desktop looks and moves (scheme, density, text size, motion) and the
+# picture: only the words and ranges the shell itself can have set.
+test_login_sync_takes_the_scheme_motion_and_picture() {
+  _login_src
+  printf '\xff\xd8\xff\xe0face' > "$L/face"
+  printf '{"light":"07:12","scheme":"light","density":"regular","textScale":1.1,"speed":1.5,"still":true}' > "$L/login.json"
+  printf '{"palette":{"dark":{"accent":"#8ab4f8","accent2":"#92ec8d"},"light":{"accent":"#1a5fb4","bg":"#f4f5f7","text":"url(x)"}}}' > "$L/palette.json"
+  "$R" login-sync
+  D="$VITRUM_LOGIN_ROOT/$U"
+  assert_eq "$(head -c 3 "$D/face" | od -An -tx1 | tr -d ' \n')" "ffd8ff"
+  assert_eq "$(cat "$D/login.json")" '{"light": "07:12", "scheme": "light", "density": "regular", "textScale": 1.1, "speed": 1.5, "still": true}'
+  assert_eq "$(cat "$D/palette.json")" '{"palette": {"dark": {"accent": "#8ab4f8", "accent2": "#92ec8d"}, "light": {"bg": "#f4f5f7", "accent": "#1a5fb4"}}}'
+}
+test_login_sync_drops_odd_scheme_and_motion_values() {
+  _login_src
+  printf 'not a picture' > "$L/face"
+  # A word it does not know, numbers out of range or not numbers at all, a
+  # truthy string: none of it reaches the greeter.
+  for bad in '"scheme":"dusk"' '"scheme":1' '"density":"huge"' '"textScale":9' '"textScale":true' \
+             '"speed":0' '"speed":1000' '"speed":"2"' '"speed":NaN' '"speed":Infinity' '"speed":true' '"still":"yes"' '"still":1'; do
+    printf '{"dark":"18:40",%s}' "$bad" > "$L/login.json"
+    "$R" login-sync
+    assert_eq "$(cat "$VITRUM_LOGIN_ROOT/$U/login.json")" '{"dark": "18:40"}'
+  done
+  [[ ! -e "$VITRUM_LOGIN_ROOT/$U/face" ]]
+}
 test_login_sync_refuses_fifos_links_and_fakes() {
   _login_src
   rm "$L/day" "$L/login.json" "$L/night"

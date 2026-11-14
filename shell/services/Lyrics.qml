@@ -26,7 +26,13 @@ Singleton {
 
     readonly property string key: Media.available && Media.title ? Media.artist + "\n" + Media.title : ""
     readonly property string cacheDir: (Quickshell.env("XDG_CACHE_HOME") || Quickshell.env("HOME") + "/.cache") + "/vitrum/lyrics"
-    onKeyChanged: fetchLater.restart()
+    // Another track: the last one's lines go at once (they would stand under
+    // the new title until the question is asked), the answer comes later.
+    onKeyChanged: {
+        lines = []; plain = ""; index = -1;
+        if (key && enabled) state = "loading";
+        fetchLater.restart();
+    }
     // Turned on: found for what plays now; off: gone from the bar and the lock as well.
     readonly property bool enabled: Settings.get("media.lyrics", true)
     onEnabledChanged: fetchLater.restart()

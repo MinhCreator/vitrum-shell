@@ -161,6 +161,13 @@ Scope {
         function art(): string { return Media.artUrl; }
     }
     IpcHandler {
+        target: "player"
+        // The full-screen player.
+        function toggle(): void { UiState.toggle("player"); }
+        function open(): void { UiState.closeAll(); UiState.player = true; }
+        function close(): void { UiState.player = false; }
+    }
+    IpcHandler {
         target: "power"
         function toggle(): void { UiState.toggle("power"); }
     }
@@ -196,6 +203,7 @@ Scope {
         function locktype(text: string): void { if (lockRef) lockRef.password = text; }
         function lockfail(): void { if (lockRef) lockRef.fail("Wrong password"); }
         function lockambient(on: bool): void { if (lockRef) lockRef.ambient = on; }
+        function lockcaps(on: bool): void { if (lockRef) lockRef.capsLock = on; }   // the LED cannot be set from a test
         function lockleave(): void { if (lockRef) { lockRef.leaving = true; } }
         function idle(): string { return JSON.stringify({ dimmed: Idle.dimmed, awake: Awake.active, media: Awake.media, auto: Awake.automatic }); }
         function hovertitle(on: bool): void { UiState.debugHoverTitle = on; }

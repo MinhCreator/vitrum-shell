@@ -158,6 +158,29 @@ def millennium_found() -> bool:
     return libraries_present() and hooked()
 
 
+def on_nixos() -> bool:
+    """NixOS (/etc/NIXOS, or ID=nixos in os-release). The tests say which
+    through VITRUM_NIXOS (1 or 0)."""
+    forced = os.environ.get("VITRUM_NIXOS")
+    if forced in ("0", "1"):
+        return forced == "1"
+    if Path("/etc/NIXOS").exists():
+        return True
+    try:
+        text = Path("/etc/os-release").read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return False
+    return re.search(r'(?m)^ID="?nixos"?\s*$', text) is not None
+
+
+def unsupported() -> str:
+    """The system Millennium cannot be installed on, "" when it can. NixOS:
+    there is no /usr/lib to copy it into and no AUR, and Steam runs inside an
+    environment of its own that would not see it. Libraries someone did put
+    in place (VITRUM_MILLENNIUM_LIB) are used as anywhere else."""
+    return "NixOS" if on_nixos() and not libraries_present() else ""
+
+
 def read_config(path: Path | None = None) -> dict | None:
     """Millennium's config, {} when there is none yet, None when unreadable."""
     path = path or config_file()
@@ -204,7 +227,8 @@ def installed() -> bool:
 def status(run=subprocess.run) -> dict:
     return {"millennium": millennium_found(), "installed": installed(),
             "active": installed() and active_theme() == THEME,
-            "steamRunning": steam_running(run), "themeDir": str(theme_dir())}
+            "steamRunning": steam_running(run), "themeDir": str(theme_dir()),
+            "unsupported": unsupported()}
 
 
 # --------------------------------------------------------------- colour -----
@@ -715,7 +739,8 @@ def install_millennium(reinstall: bool = False, *, interactive: bool | None = No
     PKGBUILD; yes passes --noconfirm). Everything else: the official release
     tarball, pinned in RELEASE and checked against its SHA-256 before
     anything is unpacked, copied to /usr/lib/millennium with sudo. Then this
-    user's links. Raises SteamThemeError with what to do when it cannot."""
+    user's links. NixOS: neither, said so before anything is tried. Raises
+    SteamThemeError with what to do when it cannot."""
     if interactive is None:
         interactive = sys.stdin.isatty()
     if not reinstall and libraries_present():
@@ -723,6 +748,9 @@ def install_millennium(reinstall: bool = False, *, interactive: bool | None = No
             link_hooks()
             return "linked"
         return "present"
+    if on_nixos():
+        raise SteamThemeError("Millennium is not supported on NixOS: vitrum cannot install it there "
+                              "(no /usr/lib, and Steam runs in an environment of its own)")
     if platform.system() != "Linux" or platform.machine() not in ("x86_64", "AMD64"):
         raise SteamThemeError("Millennium runs on x86_64 Linux only")
     if _distro_has_pacman(which):

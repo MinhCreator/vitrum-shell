@@ -56,7 +56,7 @@ def make_home(tmp):
     lib = Path(tmp) / "usr-lib-millennium"
     env = {"HOME": str(home), "XDG_CONFIG_HOME": str(home / ".config"), "XDG_DATA_HOME": str(home / ".local/share"),
            "XDG_CACHE_HOME": str(home / ".cache"), "VITRUM_MILLENNIUM_LIB": str(lib),
-           "VITRUM_STEAM_THEME_SRC": str(THEME_SRC)}
+           "VITRUM_STEAM_THEME_SRC": str(THEME_SRC), "VITRUM_NIXOS": "0"}
     return home, steam_root, lib, env
 
 
@@ -680,7 +680,7 @@ class Status(Base):
     def test_status(self):
         s = steam.status()
         self.assertEqual(s, {"millennium": False, "installed": False, "active": False, "steamRunning": False,
-                             "themeDir": str(steam.theme_dir())})
+                             "themeDir": str(steam.theme_dir()), "unsupported": ""})
         fake_libs(self.lib)
         steam.link_hooks()
         steam.install_theme()
@@ -751,6 +751,23 @@ class Millennium(Base):
         self.assertTrue(steam.hooked())
         link = self.steam_root / "ubuntu12_32" / "libXtst.so.6"
         self.assertEqual(os.readlink(link), str(self.lib / "libmillennium_bootstrap_x86.so"))
+
+    def test_nixos_is_not_supported_and_nothing_is_tried(self):
+        self.linux()
+        run, calls = self.run_recorder()
+        which = {"sudo": "/run/wrappers/bin/sudo", "curl": "/run/current-system/sw/bin/curl"}.get
+        with mock.patch.dict(os.environ, {"VITRUM_NIXOS": "1"}):
+            self.assertEqual(steam.status()["unsupported"], "NixOS")
+            with self.assertRaises(steam.SteamThemeError) as e:
+                steam.install_millennium(interactive=True, run=run, which=which)
+        self.assertIn("not supported on NixOS", str(e.exception))
+        self.assertEqual(calls, [])
+
+    def test_nixos_with_libraries_of_your_own(self):
+        fake_libs(self.lib)
+        with mock.patch.dict(os.environ, {"VITRUM_NIXOS": "1"}):
+            self.assertEqual(steam.status()["unsupported"], "")
+            self.assertEqual(steam.install_millennium(run=self.run_recorder()[0], which=lambda c: None), "linked")
 
     def test_arch_without_a_terminal(self):
         self.linux()
@@ -883,7 +900,7 @@ class Helper(unittest.TestCase):
         r = self.run_helper("status")
         self.assertEqual(r.returncode, 0, r.stderr)
         s = json.loads(r.stdout)
-        self.assertEqual(set(s), {"millennium", "installed", "active", "steamRunning", "themeDir"})
+        self.assertEqual(set(s), {"millennium", "installed", "active", "steamRunning", "themeDir", "unsupported"})
         self.assertFalse(s["installed"])
         self.assertEqual(r.stdout.count("\n"), 1)
 

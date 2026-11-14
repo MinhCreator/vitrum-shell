@@ -84,5 +84,15 @@ Singleton {
     function stop()      { if (available) current.stop(); }
     function seek(pos)   { if (available && current.canSeek) current.position = pos; }
 
+    /// What a source is called where one is picked (the panel, the full-screen
+    /// player): its name, cut to a length that fits a button; two of the same
+    /// app (two tabs) are told apart by what they play.
+    function sourceLabel(player) {
+        const cut = (t, n) => t.length > n ? t.slice(0, n - 1) + "…" : t;
+        const name = String(player.identity || ""), track = String(player.trackTitle || "");
+        const twin = players.filter(p => p.identity === player.identity).length > 1;
+        return twin && track ? cut(name, 16) + " · " + cut(track, 18) : cut(name, 28);
+    }
+
     function setPlayer(p) { current = p; }
 }

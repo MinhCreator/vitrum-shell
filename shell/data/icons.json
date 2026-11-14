@@ -158,6 +158,10 @@
   "ph": "lock",
   "nerd": "󰌾"
  },
+ "caps-lock": {
+  "phosphor": "",
+  "ph": "arrow-fat-line-up"
+ },
  "logout": {
   "phosphor": "",
   "ph": "sign-out",

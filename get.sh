@@ -8,6 +8,33 @@ REPO="${VITRUM_REPO:-https://github.com/LanisOff/vitrum-shell}"
 BRANCH="${VITRUM_BRANCH:-main}"
 DATA="${XDG_DATA_HOME:-$HOME/.local/share}"
 
+# NixOS takes vitrum as a flake: nothing to clone, and nothing an installer
+# could write (lib/backend/detect.sh says the same to a checkout run by hand).
+# The tests (VITRUM_TEST=1) name the root to look in, so the machine running
+# them does not decide.
+_os_release=/etc/os-release
+[[ "${VITRUM_TEST:-}" == 1 ]] && _os_release="${VITRUM_ROOTFS:-/nonexistent}/etc/os-release"
+if awk -F= '$1 == "ID" || $1 == "ID_LIKE" { gsub(/"/, "", $2); n = split($2, w, " "); for (i = 1; i <= n; i++) if (w[i] == "nixos") found = 1 }
+            END { exit !found }' "$_os_release" 2>/dev/null; then
+  cat >&2 <<'TXT'
+vitrum on NixOS comes from its flake, not from this installer.
+
+In your system's flake.nix:
+
+  inputs.vitrum.url = "github:LanisOff/vitrum-shell";
+  inputs.vitrum.inputs.nixpkgs.follows = "nixpkgs";
+
+and in the machine's configuration:
+
+  imports = [ inputs.vitrum.nixosModules.default ];
+  programs.vitrum.enable = true;
+
+Then nixos-rebuild switch, and pick "vitrum" on the login screen.
+The README has the rest, under NixOS.
+TXT
+  exit 1
+fi
+
 # _need_sudo — git is installed through sudo, and the installer runs as you
 # with sudo per command, so without it nothing can start. A minimal system
 # (Void especially) may not have it: say how to get it here, rather than

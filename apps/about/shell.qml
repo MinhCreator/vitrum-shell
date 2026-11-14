@@ -28,11 +28,13 @@ import "lib/about.js" as About
  */
 ShellRoot {
     id: app
-    property string version: ""
+    // What the package says (Nix), else what the installer wrote.
+    property string version: Paths.version
     FileView {
         path: Quickshell.env("HOME") + "/.local/share/vitrum/version"
-        onLoaded: app.version = text().trim()
-        onLoadFailed: app.version = ""
+        printErrors: false
+        onLoaded: app.version = Paths.version || text().trim()
+        onLoadFailed: app.version = Paths.version
     }
     Component.onCompleted: { SysInfo.refreshDisplays(); SysInfo.refreshDetails(); }
 

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # vitrum-root — the few things the desktop does as root, and nothing else.
 #
 #   vitrum-root wg-list              WireGuard configs in /etc/wireguard
@@ -7,7 +7,8 @@
 #   vitrum-root disks                the whole disks (for health checks)
 #   vitrum-root smart <device>       smartctl health and attributes, as JSON
 #   vitrum-root login-sync           the caller's login-screen files (wallpaper,
-#                                    palette, day/night times), checked, into
+#                                    picture, palette, day/night times, scheme,
+#                                    motion), checked, into
 #                                    /var/lib/vitrum/login/<user> for the greeter
 #
 # The shell runs it through pkexec; a polkit rule (installed with it) lets the
@@ -15,7 +16,11 @@
 # password. Every argument is checked here: names must be configs that exist,
 # devices must be whole disks.
 set -euo pipefail
-PATH=/usr/sbin:/usr/bin:/sbin:/bin
+# Root never takes its PATH from the caller: this line is the only one. A
+# package whose tools live elsewhere (Nix) replaces the whole line at build
+# time; it is found by its marker. The /run folders are NixOS's, owned by
+# root there and absent everywhere else.
+PATH=/usr/sbin:/usr/bin:/sbin:/bin:/run/wrappers/bin:/run/current-system/sw/bin # @VITRUM_ROOT_PATH@
 
 wg_name() {
   local n="${1:-}"
@@ -42,7 +47,7 @@ case "${1:-}" in
     # it), so only regular files the user owns, of sane size, pictures that
     # are pictures, and JSON rebuilt from the keys it knows, are copied.
     exec python3 - "${PKEXEC_UID:-$(id -u)}" "${VITRUM_LOGIN_ROOT:-/var/lib/vitrum/login}" <<'PY'
-import json, os, pwd, re, stat, sys
+import json, math, os, pwd, re, stat, sys
 
 uid, root = int(sys.argv[1]), sys.argv[2]
 pw = pwd.getpwuid(uid)
@@ -82,9 +87,13 @@ def as_json(data):
     except (ValueError, UnicodeDecodeError):
         return None
 
+def number(v, low, high):
+    # A real number in range: json.loads lets NaN and Infinity through, and True is an int.
+    return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) and low <= v <= high
+
 out = {}
-for name in ("day", "night"):
-    d = read(name, 40 << 20)
+for name, cap in (("day", 40 << 20), ("night", 40 << 20), ("face", 8 << 20)):
+    d = read(name, cap)
     if picture(d):
         out[name] = d
 info = as_json(read("login.json", 64 << 10))
@@ -97,17 +106,32 @@ if isinstance(info, dict):
         clean["font"] = info["font"]
     if isinstance(info.get("h24"), bool):
         clean["h24"] = info["h24"]
+    # How the desktop looks and moves: one of the words the shell knows, a
+    # number within what its settings allow, a plain true or false.
+    for k, words in (("scheme", ("auto", "light", "dark")), ("density", ("compact", "regular", "comfortable"))):
+        if isinstance(info.get(k), str) and info[k] in words:
+            clean[k] = info[k]
+    for k, low, high in (("textScale", 0.85, 1.3), ("speed", 0.1, 4)):
+        if number(info.get(k), low, high):
+            clean[k] = round(float(info[k]), 3)
+    if isinstance(info.get("still"), bool):
+        clean["still"] = info["still"]
     out["login.json"] = json.dumps(clean).encode()
 pal = as_json(read("palette.json", 256 << 10))
-dark = pal.get("palette", {}).get("dark") if isinstance(pal, dict) and isinstance(pal.get("palette"), dict) else None
-if isinstance(dark, dict):
-    keys = ("bg", "surface", "text", "textDim", "accent", "onAccent", "danger")
-    clean = {k: dark[k] for k in keys if isinstance(dark.get(k), str) and re.fullmatch(r"#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?", dark[k])}
-    out["palette.json"] = json.dumps({"palette": {"dark": clean}}).encode()
+schemes = pal.get("palette") if isinstance(pal, dict) and isinstance(pal.get("palette"), dict) else {}
+def roles(scheme):
+    keys = ("bg", "surface", "text", "textDim", "accent", "accent2", "onAccent", "danger")
+    return {k: scheme[k] for k in keys if isinstance(scheme.get(k), str) and re.fullmatch(r"#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?", scheme[k])}
+if isinstance(schemes.get("dark"), dict):
+    clean = {"dark": roles(schemes["dark"])}
+    # The light scheme too (the greeter follows the desktop's), when it has colours.
+    if isinstance(schemes.get("light"), dict) and roles(schemes["light"]):
+        clean["light"] = roles(schemes["light"])
+    out["palette.json"] = json.dumps({"palette": clean}).encode()
 
 os.makedirs(dst, mode=0o755, exist_ok=True)
 os.chmod(dst, 0o755)
-for name in ("day", "night", "login.json", "palette.json"):
+for name in ("day", "night", "face", "login.json", "palette.json"):
     path = os.path.join(dst, name)
     if name not in out:
         try:

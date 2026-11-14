@@ -70,9 +70,10 @@ _theme_gtk() {
   # the name already in each settings.ini is kept, gsettings' is not touched.
   local gtk_theme=Adwaita gtk_on=1 v
   [[ "$(_theme_setting toolkits.gtk "")" == false ]] && gtk_on=0
-  # The package puts it in /usr/share/themes; where the distribution has none
-  # (Void), lib/assets.tsv unpacks the upstream release into the user's themes.
-  if [[ -d /usr/share/themes/adw-gtk3-dark || -d "$XDG_DATA_HOME/themes/adw-gtk3-dark" ]]; then gtk_theme=adw-gtk3-dark; fi
+  # The package puts it in /usr/share/themes, or wherever the system's data
+  # dirs are (NixOS has no /usr/share); where the distribution has none (Void),
+  # lib/assets.tsv unpacks the upstream release into the user's themes.
+  if _theme_gtk_installed adw-gtk3-dark; then gtk_theme=adw-gtk3-dark; fi
   for v in 3 4; do
     local f="$XDG_CONFIG_HOME/gtk-$v.0/settings.ini" name="$gtk_theme"
     if [[ $gtk_on == 0 ]]; then
@@ -96,6 +97,17 @@ _theme_gtk() {
     _gsettings set $i font-hinting slight 2>/dev/null || true
     _gsettings set org.gnome.desktop.wm.preferences button-layout ":close" 2>/dev/null || true
   fi
+}
+
+# _theme_gtk_installed <theme> — 0 when a GTK theme of that name is there: in
+# the system's data dirs (XDG_DATA_DIRS, and /usr/share whatever that says) or
+# the user's.
+_theme_gtk_installed() {
+  local d dirs="${XDG_DATA_DIRS:-/usr/local/share:/usr/share}:/usr/share:$XDG_DATA_HOME"
+  while IFS= read -r d; do
+    [[ "$d" == /* && -d "$d/themes/$1" ]] && return 0
+  done < <(tr ':' '\n' <<<"$dirs")
+  return 1
 }
 
 # gsettings with a session bus of its own when there is none to talk to.

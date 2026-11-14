@@ -3,23 +3,27 @@ import QtQuick.Effects
 import qs.services
 import qs.theme
 import qs.components
+import "root:/lib/lock.js" as Lib
 
 /*
  * The password field, of glass (a rounded rectangle, Tokens.radiusTile). The
  * text itself is never drawn: each character is a dot that grows in, damped,
  * and shrinks away when erased.
  *
- * Dichroic: once there is something typed the field lights up gently with the
- * tint (ShellTint), a little more with each character up to eight. While PAM
- * checks, a light that turns from the accent to accent2 sweeps along it. A
- * good password sweeps the tint once more as the lock dissolves (LockView
- * blooms the flash out of here).
+ * Lit glass: once there is something typed the field turns on like any other
+ * piece (ShellTint: frosted, a bright rim, the accent only as a light under
+ * it and in the lock icon), gently, a little more with each character up to
+ * eight. While PAM checks, a white light sweeps along it. A good password
+ * passes the light across once more as the lock dissolves (LockView blooms
+ * its light out of here).
  *
- * A wrong password: the glass takes the danger tint (Colors.danger and its
- * pair), the dots blush red and the field shakes — one damped swing, not a
- * set of jerks — then the dots go out together and the "Password" hint fades
- * back in. Nothing overlaps on the way: the dots stay until the shake is
- * over, whatever the lock did with the password.
+ * A wrong password: the glass lights up in Colors.danger, the dots blush red
+ * and the field shakes — one damped swing, not a set of jerks — then the dots
+ * go out together and the "Password" hint fades back in. Nothing overlaps on
+ * the way: the dots stay until the shake is over, whatever the lock did with
+ * the password. The timings are Lib.refusal's, at the motion speed. With
+ * animations off the swing and the fades are left out: the red light comes
+ * on, holds and goes.
  *
  * Caps Lock on: a small line icon at the right end (lock.capsLock).
  */
@@ -38,6 +42,7 @@ LockGlass {
     property real swing: 0            // 0 → 1 over the shake
     property bool refusing: false
     property real dotsOpacity: 1
+    readonly property var t: Lib.refusal(Motion.speed)
     readonly property real shake: Tokens.islandHeight * 0.42 * Math.sin(swing * Math.PI * 6) * Math.pow(1 - swing, 2)
     transform: Translate { x: field.shake }
 
@@ -45,15 +50,15 @@ LockGlass {
         id: refuse
         ScriptAction { script: { field.refusing = true; field.dotsOpacity = 1; dangerTint.sweep(); } }
         ParallelAnimation {
-            NumberAnimation { target: field; property: "swing"; from: 0; to: 1; duration: 520; easing.type: Easing.Linear }
+            NumberAnimation { target: field; property: "swing"; from: 0; to: 1; duration: field.t.swing; easing.type: Easing.Linear }
             SequentialAnimation {
-                NumberAnimation { target: field; property: "flash"; to: 1; duration: 120; easing.type: Easing.OutCubic }
-                PauseAnimation { duration: 300 }
-                NumberAnimation { target: field; property: "flash"; to: 0; duration: 560; easing.type: Easing.InOutCubic }
+                NumberAnimation { target: field; property: "flash"; to: 1; duration: field.t.flashIn; easing.type: Easing.OutCubic }
+                PauseAnimation { duration: field.t.hold }
+                NumberAnimation { target: field; property: "flash"; to: 0; duration: field.t.flashOut; easing.type: Easing.InOutCubic }
             }
             SequentialAnimation {
-                PauseAnimation { duration: 380 }
-                NumberAnimation { target: field; property: "dotsOpacity"; to: 0; duration: 160; easing.type: Easing.InCubic }
+                PauseAnimation { duration: field.t.dotsAfter }
+                NumberAnimation { target: field; property: "dotsOpacity"; to: 0; duration: field.t.dotsOut; easing.type: Easing.InCubic }
             }
         }
         // The dots go while they are invisible: the ListView runs its remove
@@ -63,19 +68,27 @@ LockGlass {
         PauseAnimation { duration: Motion.fast + 40 }
         ScriptAction { script: { dots.sync(field.lock.password.length, false); field.refusing = false; field.dotsOpacity = 1; } }
     }
+    // Animations off: no swing and no fades, but a refusal must still be seen.
+    SequentialAnimation {
+        id: refuseStill
+        ScriptAction { script: { field.swing = 0; field.dotsOpacity = 1; field.flash = 1; } }
+        PauseAnimation { duration: field.t.flashIn + field.t.hold }
+        ScriptAction { script: { field.flash = 0; dots.sync(field.lock.password.length, false); field.refusing = false; } }
+    }
     Connections {
         target: field.lock
         function onFailuresChanged() {
             if (field.lock.failures === 0) return;
+            refuse.stop(); refuseStill.stop();
             // Before the lock clears the password: the dots stay for the shake.
-            if (Motion.enabled) { field.refusing = true; refuse.restart(); }
-            else dots.sync(field.lock.password.length, false);
+            field.refusing = true;
+            if (Motion.enabled) refuse.restart(); else refuseStill.restart();
         }
         function onLeavingChanged() { if (field.lock.leaving) typingTint.sweep(); }
     }
 
     // ------------------------------------------------------- the tints ---
-    /// Something typed (or being checked, or let in): the dichroic tint is on.
+    /// Something typed (or being checked, or let in): the field is on.
     readonly property bool lit: (field.lock.password.length > 0 || field.lock.busy || field.lock.leaving) && !field.refusing
     // Gently: paler than a tile that is on, and growing with the first few characters.
     Item {
@@ -88,12 +101,10 @@ LockGlass {
             radius: field.radius
             group: "lock"
             active: field.lit
-            alphaStart: Colors.dark ? 0.44 : 0.28
-            alphaMiddle: Colors.dark ? 0.36 : 0.22
-            alphaEnd: Colors.dark ? 0.42 : 0.26
         }
     }
-    // A refusal: the danger tint (Colors.danger → its pair), swept once, as long as the flash.
+    // A refusal: the same lit glass with its light in Colors.danger, a light
+    // passing across it once, for as long as the flash.
     Item {
         anchors.fill: parent
         opacity: field.flash
@@ -121,7 +132,10 @@ LockGlass {
     }
     Item {
         anchors.fill: parent
-        visible: field.lock.busy && Motion.enabled
+        // Fades with the check: a quick answer would cut the light off mid-way.
+        opacity: field.lock.busy ? 1 : 0
+        Behavior on opacity { enabled: Motion.enabled; EaseAnim { duration: Motion.fast } }
+        visible: opacity > 0 && Motion.enabled
         layer.enabled: visible
         layer.effect: MultiEffect { maskEnabled: true; maskSource: sweepMask; maskThresholdMin: 0.5; maskSpreadAtMin: 1.0 }
         Rectangle {
@@ -129,13 +143,13 @@ LockGlass {
             width: field.width * 0.45; height: field.height
             property real p: 0
             x: -width + p * (field.width + width)
-            // Dichroic: the light turns from the accent to accent2 as it passes.
+            // A passing light, white like the one that crosses a piece
+            // turning on (Tint): the colour stays under the glass.
             gradient: Gradient {
                 orientation: Gradient.Horizontal
-                GradientStop { position: 0; color: "transparent" }
-                GradientStop { position: 0.35; color: Colors.alpha(Colors.accent, 0.38) }
-                GradientStop { position: 0.65; color: Colors.alpha(Colors.accent2, 0.42) }
-                GradientStop { position: 1; color: "transparent" }
+                GradientStop { position: 0; color: Qt.rgba(1, 1, 1, 0) }
+                GradientStop { position: 0.5; color: Qt.rgba(1, 1, 1, Colors.dark ? 0.22 : 0.6) }
+                GradientStop { position: 1; color: Qt.rgba(1, 1, 1, 0) }
             }
             NumberAnimation on p { running: sweep.visible; loops: Animation.Infinite; from: 0; to: 1; duration: Motion.emphasized * 3; easing.type: Easing.InOutQuad }
         }
@@ -145,7 +159,8 @@ LockGlass {
         anchors.fill: parent
         anchors.leftMargin: Tokens.padding * 1.5; anchors.rightMargin: Tokens.padding * 1.2
         spacing: Tokens.gap
-        Icon { id: lockIcon; name: "lock"; color: Qt.tint(Colors.textDim, Colors.alpha(Colors.danger, field.flash)); anchors.verticalCenter: parent.verticalCenter }
+        // The colour of a lit piece is in its icon.
+        Icon { id: lockIcon; name: "lock"; color: Qt.tint(field.lit ? Colors.accent : Colors.textDim, Colors.alpha(Colors.danger, field.flash)); anchors.verticalCenter: parent.verticalCenter }
         Item {
             width: parent.width - lockIcon.width - caps.width - 2 * Tokens.gap
             height: parent.height
@@ -189,7 +204,8 @@ LockGlass {
                 anchors.verticalCenter: parent.verticalCenter
                 opacity: dotModel.count === 0 && !field.refusing ? 1 : 0
                 Behavior on opacity { enabled: Motion.enabled; EaseAnim { duration: Motion.standard } }
-                text: field.lock.busy ? "Checking…" : "Password"
+                // (A check always has dots over it: LockView's line says "Checking…".)
+                text: "Password"
                 role: "dim"
                 size: Tokens.textLarge
             }
@@ -230,9 +246,7 @@ LockGlass {
                 }
             }
         }
-        // Caps Lock: Phosphor's arrow-fat-line-up (⇪), a thin line like every
-        // icon here. shell/data/icons.json has no name for it, so the glyph
-        // is drawn straight from the icon font.
+        // Caps Lock: Phosphor's arrow-fat-line-up (⇪), a thin line like every icon here.
         Item {
             id: caps
             readonly property bool on: field.lock.capsLock
@@ -241,12 +255,9 @@ LockGlass {
             height: Tokens.iconSize
             clip: true
             Behavior on width { enabled: Motion.enabled; SpringAnim { token: Motion.snappy } }
-            Text {
+            Icon {
                 anchors.centerIn: parent
-                text: ""
-                font.family: Tokens.fontIcons
-                font.pixelSize: Tokens.iconSize
-                color: Colors.text
+                name: "caps-lock"
                 opacity: caps.on ? 0.9 : 0
                 Behavior on opacity { enabled: Motion.enabled; EaseAnim {} }
             }

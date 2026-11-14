@@ -39,7 +39,7 @@ Singleton {
     }
 
     // --------------------------------------------------------- WireGuard ---
-    readonly property string helper: "/usr/local/libexec/vitrum/vitrum-root"
+    readonly property string helper: Paths.rootHelper
     property var wgConfigs: []        // names in /etc/wireguard
     property var wgUp: []             // links up now
     property bool wgAfterList: false

@@ -15,12 +15,12 @@ import "root:/lib/lock.js" as Lib
  *           the time, the date, you, the greeting, the field, …), short,
  *           eased out with no overshoot;
  *   leave   0 → 1 after a good password: the blocks float off, the wallpaper
- *           sharpens and a soft dichroic flash (accent → accent2) blooms out
- *           of the field and fades, so the desktop appears without a cut;
+ *           sharpens and a soft light in the accent blooms out of the field
+ *           and fades, so the desktop appears without a cut;
  *   amb     quiet (ambient, after lock.ambientSeconds without input): the
  *           field, the power buttons, the status row and the rest recede to
  *           Lib.QUIET_OPACITY; the clock and the player stay as they are. Any
- *           key or pointer motion brings the rest back.
+ *           key or pointer motion brings the rest back, quicker than it went.
  * With Motion.enabled false all three jump.
  */
 Item {
@@ -29,14 +29,19 @@ Item {
     property string outputName: ""
 
     property real enter: 0
-    Component.onCompleted: { enterAnim.start(); faceCheck.running = true; view.lock.checkCaps(); }
+    Component.onCompleted: { enterAnim.start(); faceCheck.running = true; view.lock.checkCaps(); liftAnim.stop(); lift = liftTarget; }
     NumberAnimation { id: enterAnim; target: view; property: "enter"; from: 0; to: 1; duration: Motion.enabled ? Motion.emphasized * 2.2 : 0; easing.type: Easing.Linear }
 
     property real leave: lock.leaving ? 1 : 0
     Behavior on leave { enabled: Motion.enabled; NumberAnimation { duration: view.lock.leaveDuration; easing.type: Easing.InOutCubic } }
 
     property real amb: lock.ambient ? 1 : 0
-    Behavior on amb { enabled: Motion.enabled; NumberAnimation { duration: Motion.emphasized * 2; easing.type: Easing.InOutCubic } }
+    // Slow into the quiet, quick out of it: someone is waiting to type.
+    Behavior on amb {
+        id: ambFade
+        enabled: Motion.enabled
+        NumberAnimation { duration: ambFade.targetValue > 0.5 ? Motion.emphasized * 2 : Motion.standard; easing.type: ambFade.targetValue > 0.5 ? Easing.InOutCubic : Easing.OutCubic }
+    }
 
     /// The highest `order` of the entrance (the power buttons).
     readonly property int lastOrder: 8
@@ -190,8 +195,9 @@ Item {
         Item { width: 1; height: 1 }
 
         // You: your picture (~/.face, ~/.face.icon or AccountsService's), or
-        // your initial on round tinted glass, inside a glass rim and a thin
-        // dichroic ring (accent → accent2); the greeting just under it.
+        // your initial, on a round disc of glass inside a rim of lit glass:
+        // frosted, a bright hairline, the accent only as a soft light under
+        // it. The greeting just under it.
         Rise {
             order: 2
             anchors.horizontalCenter: parent.horizontalCenter
@@ -199,41 +205,24 @@ Item {
             Item {
                 id: avatar
                 anchors.fill: parent
-                readonly property real ring: Math.max(2, Tokens.islandHeight * 0.08)
-                readonly property real gap: Math.max(2, Tokens.islandHeight * 0.1)
+                /// From the rim to the disc: the band of lit glass round it.
+                readonly property real band: Math.max(4, Tokens.islandHeight * 0.18)
                 readonly property bool hasPicture: face.status === Image.Ready
 
-                // The ring: an annulus filled with the diagonal accent → accent2.
-                Shape {
+                // The rim: lit glass, round by nature (its light reaches a
+                // little past the avatar, mostly below).
+                ShellTint {
                     anchors.fill: parent
-                    preferredRendererType: Shape.CurveRenderer
-                    ShapePath {
-                        strokeColor: "transparent"
-                        strokeWidth: 0
-                        fillRule: ShapePath.OddEvenFill
-                        fillGradient: LinearGradient {
-                            x1: 0; y1: 0; x2: avatar.width; y2: avatar.height
-                            GradientStop { position: 0; color: Colors.accent }
-                            GradientStop { position: 1; color: Colors.accent2 }
-                        }
-                        PathAngleArc { centerX: avatar.width / 2; centerY: avatar.height / 2; radiusX: avatar.width / 2; radiusY: radiusX; startAngle: 0; sweepAngle: 360 }
-                        PathAngleArc { centerX: avatar.width / 2; centerY: avatar.height / 2; radiusX: avatar.width / 2 - avatar.ring; radiusY: radiusX; startAngle: 0; sweepAngle: 360 }
-                    }
+                    radius: width / 2
+                    group: "lock"
                 }
                 // The disc of glass inside it, with its own rim.
                 Rectangle {
                     id: disc
                     anchors.fill: parent
-                    anchors.margins: avatar.ring + avatar.gap
+                    anchors.margins: avatar.band
                     radius: width / 2
-                    color: Qt.rgba(1, 1, 1, Colors.dark ? 0.07 : 0.16)
-                    ShellTint {
-                        anchors.fill: parent
-                        radius: width / 2
-                        group: "lock"
-                        active: !avatar.hasPicture
-                        rim: false
-                    }
+                    color: field.rest
                     Label {
                         anchors.centerIn: parent
                         visible: !avatar.hasPicture
@@ -296,26 +285,58 @@ Item {
             order: 4
             anchors.horizontalCenter: parent.horizontalCenter
             width: status.width; height: status.height
+            // One line: what went wrong, the check, or a word about Caps Lock.
+            // A new one fades in after the old one is out; a check quicker
+            // than that never shows its word.
             Label {
                 id: status
-                text: view.lock.error || (view.lock.busy ? "Checking…" : " ")
-                role: view.lock.error ? "danger" : "dim"
-                Behavior on opacity { enabled: Motion.enabled; EaseAnim {} }
+                readonly property string want: Lib.statusLine(view.lock.error, view.lock.busy, view.lock.capsLock)
+                property bool bad: false
+                function take() { text = want; bad = view.lock.error.length > 0; }
+                text: " "
+                role: bad ? "danger" : "dim"
+                Component.onCompleted: take()
+                onWantChanged: {
+                    if (Motion.enabled) swap.restart();
+                    else { swap.stop(); take(); opacity = 1; }
+                }
+                SequentialAnimation {
+                    id: swap
+                    NumberAnimation { target: status; property: "opacity"; to: 0; duration: Motion.fast; easing.type: Easing.InCubic }
+                    ScriptAction { script: status.take() }
+                    NumberAnimation { target: status; property: "opacity"; to: 1; duration: Motion.standard; easing.type: Easing.OutCubic }
+                }
             }
         }
     }
 
     // What came in while locked: under the centre, never into the player (or
     // the status row) — as many as fit there, the rest clipped.
-    readonly property real notesBottom: (player.visible ? player.y : statusRow.y) - Tokens.gap * 2
+    // It follows the player as it comes and goes (`here`) and as its height
+    // eases, instead of stepping the moment the player turns visible.
+    readonly property real notesBottom: statusRow.y - player.here * (statusRow.y - player.y) - Tokens.gap * 2
+    // Where that is heading: the player there or not, at the height it will
+    // have. The lift is reckoned from this. From the eased values its target
+    // moved on every frame of the player's arrival (and of its lyrics folding
+    // in), the lift started over each time, stood still under the player and
+    // went only once the player had settled.
+    readonly property real notesBottomSettled: (player.wanted ? statusRow.y - Tokens.gap * 2 - player.settledHeight : statusRow.y) - Tokens.gap * 2
     // Notifications that would not fit lift the centre (down to a margin at
     // the top) — from where it sits unlifted, so the lift never feeds itself.
-    // Not animated: a Behavior here never left 0 under the nested test session.
-    property real lift: {
+    readonly property real liftTarget: {
         const baseY = (height - centre.height) / 2 - height * 0.04;
-        const room = notesBottom - (baseY + centre.height + centre.spacing);
+        const room = notesBottomSettled - (baseY + centre.height + centre.spacing);
         return Math.max(0, Math.min(notes.wanted - room, baseY - height * 0.05));
     }
+    // Eased, so the clock and the field glide up when a notification comes.
+    // Run by hand: a Behavior here never left 0 under the nested test session.
+    property real lift: 0
+    function settleLift() {
+        if (Motion.enabled && Motion.emphasized > 0) { liftAnim.to = liftTarget; liftAnim.restart(); }
+        else { liftAnim.stop(); lift = liftTarget; }
+    }
+    onLiftTargetChanged: settleLift()
+    NumberAnimation { id: liftAnim; target: view; property: "lift"; duration: Motion.emphasized; easing.type: Easing.OutCubic }
     Rise {
         order: 5
         anchors.horizontalCenter: parent.horizontalCenter
@@ -326,7 +347,9 @@ Item {
         LockNotifications {
             id: notes
             since: view.lock.lockedAt; backdrop: view.glassBackdrop; source: view.glassSource
-            maxHeight: Math.max(0, view.notesBottom - parent.y)
+            // The room there will be once the centre has settled: laid out
+            // for that at once, and uncovered as the centre moves.
+            maxHeight: Math.max(0, view.notesBottomSettled - (parent.y + view.lift - view.liftTarget))
         }
     }
 
@@ -377,8 +400,8 @@ Item {
     }
 
     // ------------------------------------------------- the way out --
-    // A good password: a soft dichroic light (accent → accent2) blooms out of
-    // the field as the blocks float off, and fades with them. Drawn only while
+    // A good password: a soft light in the accent, one hue, blooms out of the
+    // field as the blocks float off, and fades with them. Drawn only while
     // leaving; with Motion.enabled false `leave` jumps and it never shows.
     property point flashAt: Qt.point(width / 2, height / 2)
     Connections {
@@ -402,8 +425,8 @@ Item {
                 centerRadius: Math.max(view.width, view.height) * (0.2 + 0.7 * view.leave)
                 focalRadius: 0
                 GradientStop { position: 0; color: Colors.alpha(Colors.accent, 0.55) }
-                GradientStop { position: 0.4; color: Colors.alpha(Colors.accent2, 0.32) }
-                GradientStop { position: 1; color: "transparent" }
+                GradientStop { position: 0.4; color: Colors.alpha(Colors.accent, 0.3) }
+                GradientStop { position: 1; color: Colors.alpha(Colors.accent, 0) }
             }
             startX: 0; startY: 0
             PathLine { x: view.width; y: 0 }
@@ -450,7 +473,7 @@ Item {
         height: Tokens.islandHeight
         radius: Tokens.radiusIsland
         width: islandRow.implicitWidth + 2 * Tokens.padding
-        tint: island.clickable && islandMouse.containsMouse ? Colors.alpha(Colors.text, islandMouse.pressed ? 0.18 : 0.13) : Qt.rgba(1, 1, 1, Colors.dark ? 0.07 : 0.16)
+        tint: island.clickable && islandMouse.containsMouse ? Colors.alpha(Colors.text, islandMouse.pressed ? 0.18 : 0.13) : island.rest
         Behavior on tint { enabled: Motion.enabled; ColorAnim {} }
         Row {
             id: islandRow

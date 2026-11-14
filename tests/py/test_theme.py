@@ -607,6 +607,22 @@ if __name__ == "__main__":
     unittest.main()
 
 
+class SystemDataDirs(unittest.TestCase):
+    def test_the_default_and_the_old_path_last(self):
+        self.assertEqual(vt.system_data_dirs({}), [Path("/usr/local/share"), Path("/usr/share")])
+        self.assertEqual(vt.system_data_dirs({"XDG_DATA_DIRS": "/run/current-system/sw/share:rel::/run/current-system/sw/share"}),
+                         [Path("/run/current-system/sw/share"), Path("/usr/share")])
+
+    def test_adw_gtk3_from_a_data_dir(self):
+        """NixOS: no /usr/share/themes, the profile's share is in XDG_DATA_DIRS."""
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "sw" / "themes" / "adw-gtk3").mkdir(parents=True)
+            env = {"XDG_DATA_DIRS": str(Path(tmp) / "sw"), "XDG_DATA_HOME": str(Path(tmp) / "home")}
+            with mock.patch.dict(os.environ, env):
+                self.assertEqual(vt.gtk_theme_name("light"), "adw-gtk3")
+                self.assertEqual(vt.gtk_theme_name("dark"), "Adwaita")
+
+
 class GtkTheme(unittest.TestCase):
     def test_adw_gtk3_when_installed(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -115,3 +115,17 @@ test_component_choices_are_recorded() {
   ( cd "$VITRUM_DIR" && ./install.sh --dry-run --yes --skip niri --no-tmux ) > "$HOME/../matrix-out.$$" 2>&1 || { tail -20 "$HOME/../matrix-out.$$"; return 1; }
   assert_contains "$(cat "$HOME/../matrix-out.$$")" "would record component choices"
 }
+
+# NixOS: the installer says how to take vitrum as a flake and changes nothing,
+# whatever package tool it could find.
+test_matrix_nixos_refused() {
+  _world pacman systemd
+  mkdir -p "$VITRUM_ROOTFS/etc"; printf 'ID=nixos\n' > "$VITRUM_ROOTFS/etc/os-release"
+  ! _run
+  local out; out="$(cat "$HOME/../matrix-out.$$")"
+  assert_contains "$out" "imports = [ inputs.vitrum.nixosModules.default ];"
+  assert_contains "$out" "programs.vitrum.enable = true;"
+  [[ "$out" != *"unsupported system"* ]] || { echo "the unsupported-system message came too"; return 1; }
+  ! grep -q '^pacman ' "$CALLS" || { echo "pacman was called: $(grep '^pacman ' "$CALLS")"; return 1; }
+  _assert_clean_home
+}

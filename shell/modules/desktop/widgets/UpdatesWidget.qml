@@ -27,7 +27,8 @@ Item {
             .map((n, i) => ({ atom: n, from: "1." + i, to: "1." + (i + 1), kind: "update" }))
         : Packages.updates
     readonly property int count: updates.length
-    readonly property bool none: Packages.backend === "" && !preview
+    // No package manager, or one with no list to make (NixOS): never "Up to date".
+    readonly property bool none: !Packages.tracked && !preview
     readonly property bool showList: options.list !== false
     // "sys-devel/gcc-14.2.1" → "gcc-14.2.1": the category is noise at this size.
     function pkgName(atom) { return String(atom || "").split("/").pop(); }
@@ -42,7 +43,7 @@ Item {
     WidgetEmpty {
         visible: root.none
         icon: "update"
-        text: "No package manager found"
+        text: Packages.noList || "No package manager found"
     }
 
     // ---- nothing waiting.

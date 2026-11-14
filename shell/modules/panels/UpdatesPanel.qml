@@ -6,7 +6,7 @@ import "../../lib/emerge.js" as Lib
 
 // The package manager (Portage, pacman, xbps or dnf): what runs now, and what
 // waits. xbps and dnf give no steps to count (Packages.logless): their run is
-// "Updating…" and how long it has run so far.
+// "Updating…" and how long it has run so far. NixOS has no list (Packages.noList).
 Column {
     id: root
     spacing: Tokens.gap
@@ -42,7 +42,7 @@ Column {
     Row {
         width: root.width
         spacing: Tokens.gap
-        Label { text: Packages.checking ? "Checking for updates…" : Packages.updates.length ? Packages.updates.length + " updates" : "Up to date"; font.weight: Font.DemiBold; anchors.verticalCenter: parent.verticalCenter
+        Label { text: Packages.noList ? Packages.noList : Packages.checking ? "Checking for updates…" : Packages.updates.length ? Packages.updates.length + " updates" : "Up to date"; font.weight: Font.DemiBold; anchors.verticalCenter: parent.verticalCenter
                 width: parent.width - up.width - Tokens.gap }
         GlassButton { id: up; visible: Packages.updates.length > 0 && !Packages.state.running; icon: "update"; label: "Update"; primary: true; onClicked: { UiState.closePanel(); Packages.update(); } }
     }

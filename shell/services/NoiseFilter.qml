@@ -15,7 +15,7 @@ import Quickshell.Services.Pipewire
 Singleton {
     id: root
 
-    readonly property string plugin: "/usr/lib64/ladspa/librnnoise_ladspa.so"
+    readonly property string plugin: "/usr/lib64/ladspa/librnnoise_ladspa.so"   // until it is found
     property bool available: false
     readonly property bool on: Settings.get("audio.noiseFilter", false)
     readonly property string nodeName: "vitrum_mic_clean"
@@ -28,7 +28,8 @@ Singleton {
     function toggle() { set(!on); }
 
     Process {
-        command: ["sh", "-c", 'for p in /usr/lib64/ladspa /usr/lib/ladspa /usr/local/lib/ladspa; do [ -e "$p/librnnoise_ladspa.so" ] && { echo "$p/librnnoise_ladspa.so"; exit 0; }; done; exit 1']
+        // LADSPA_PATH's folders, then the usual ones (Paths.ladspaDirs).
+        command: ["sh", "-c", 'for p; do [ -e "$p/librnnoise_ladspa.so" ] && { echo "$p/librnnoise_ladspa.so"; exit 0; }; done; exit 1', "sh"].concat(Paths.ladspaDirs)
         running: true
         stdout: StdioCollector { onStreamFinished: { root.available = text.trim().length > 0; if (root.available) root.found = text.trim(); } }
     }

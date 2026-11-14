@@ -43,6 +43,8 @@ Singleton {
     readonly property string current: names[index] || ""
     /// The label: EN/RU/JP/KR/CN on fcitx5's path, niri's short name on the other.
     readonly property string shortName: fcitx ? (ims.length ? Kb.fcitxShort(ims[index], current) : "") : Niri.keyboardShort
+    /// Every layout's short name, in the order of `names`: what the bar says for each (the OSD's row, when the full names do not fit).
+    readonly property var shortNames: fcitx ? ims.map((n, i) => Kb.fcitxShort(n, _names[i] || "")) : names.map(n => Kb.shortName(n))
     readonly property bool available: fcitx ? ims.length > 0 : Niri.available
 
     function next(forward) {
@@ -125,7 +127,8 @@ Singleton {
                 onLoaded: root.ims = Kb.parseProfile(text())
             }
             FileView {
-                path: "/usr/share/X11/xkb/rules/evdev.lst"
+                path: Paths.xkbRules
+                Component.onCompleted: Paths.findXkbRules()
                 printErrors: false
                 onLoaded: root.rules = Kb.parseRules(text())
             }

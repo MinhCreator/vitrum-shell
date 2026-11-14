@@ -12,6 +12,8 @@ eq(lines[4].text, "Third [with brackets]", "brackets inside text kept");
 eq(lines[3].text, "", "empty lines kept (a pause)");
 // Several stamps on one line: repeated choruses.
 eq(l.parseLrc("[00:01.00][00:10.00] Chorus").length, 2, "multiple stamps");
+eq(l.parseLrc("[00:18.80]<00:18.89>We're <00:19.25>no <00:19.53>strangers")[0].text, "We're no strangers", "word timing marks are dropped");
+eq(l.parseLrc("[00:01.00] I <3 you")[0].text, "I <3 you", "a plain < stays");
 
 // The line at a position: the last one that started.
 eq(l.lineAt(lines, 0.5), 0, "intro");

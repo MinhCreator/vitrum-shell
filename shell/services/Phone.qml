@@ -24,7 +24,9 @@ Singleton {
 
     Process {
         id: poll
-        command: ["sh", "-c", 'command -v kdeconnectd >/dev/null || [ -e /usr/share/dbus-1/services/org.kde.kdeconnect.service ] || { echo NONE; exit 0; }; exec vitrum-phone']
+        // KDE Connect is there when its daemon is on the PATH or D-Bus can start it.
+        command: ["sh", "-c", 'command -v kdeconnectd >/dev/null && exec vitrum-phone; for f; do [ -e "$f" ] && exec vitrum-phone; done; echo NONE',
+                  "sh"].concat(Paths.data("dbus-1/services/org.kde.kdeconnect.service"))
         stdout: StdioCollector {
             onStreamFinished: {
                 if (text.trim() === "NONE") { root.installed = false; root.devices = []; return; }

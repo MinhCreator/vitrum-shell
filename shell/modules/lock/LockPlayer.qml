@@ -21,6 +21,9 @@ Item {
     // The card's own plate sits inside the lock's, corners concentric.
     readonly property real inset: Math.max(4, Tokens.radiusPanel - Tokens.radiusInner * 1.5)
     height: player.implicitHeight + 2 * inset
+    /// The height it is heading to (PlayerCard.settledHeight): the lock lifts
+    /// its centre for that at once, not for each step of the way there.
+    readonly property real settledHeight: player.settledHeight + 2 * inset
     visible: here * appear > 0.01
     opacity: here * appear
     transform: Translate { y: (1 - card.here * card.appear) * Tokens.islandHeight }
@@ -37,7 +40,11 @@ Item {
         id: player
         x: card.inset; y: card.inset
         width: card.width - 2 * card.inset
+        // Its own height, eased inside the card: nothing here sets it again.
         height: implicitHeight
+        // The lock's material, not the panels'. Set by hand and only if the
+        // card has the property: a lock that fails to load locks you out.
+        Component.onCompleted: if ("group" in player) player.group = "lock"
     }
 
     // The position only updates when asked.

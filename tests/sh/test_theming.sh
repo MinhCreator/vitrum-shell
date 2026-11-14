@@ -17,6 +17,21 @@ test_gtk_settings_from_vitrum_settings() {
   done
   assert_contains "$(cat "$HOME/calls")" "icon-theme Papirus-Light"
 }
+# adw-gtk3 is looked for where the system keeps its data, not only in
+# /usr/share: NixOS has none, and names its own through XDG_DATA_DIRS.
+test_gtk_theme_found_through_the_data_dirs() {
+  _load_theming
+  mkdir -p "$HOME/sys/share/themes/adw-gtk3-dark"
+  XDG_DATA_DIRS="relative/share:$HOME/sys/share" stage_theming >/dev/null 2>&1
+  assert_contains "$(cat "$XDG_CONFIG_HOME/gtk-3.0/settings.ini")" "gtk-theme-name=adw-gtk3-dark"
+  assert_contains "$(cat "$HOME/calls")" "gtk-theme adw-gtk3-dark"
+}
+test_gtk_theme_found_in_the_users_themes() {
+  _load_theming
+  mkdir -p "$XDG_DATA_HOME/themes/adw-gtk3-dark"
+  stage_theming >/dev/null 2>&1
+  assert_contains "$(cat "$XDG_CONFIG_HOME/gtk-4.0/settings.ini")" "gtk-theme-name=adw-gtk3-dark"
+}
 test_gtk_off_keeps_your_gtk_theme() {
   _load_theming
   printf '{"toolkits":{"gtk":false}}' > "$XDG_CONFIG_HOME/vitrum/settings.json"

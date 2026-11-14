@@ -1,0 +1,232 @@
+#!/usr/bin/env bash
+# vitrum-setup — the installer's work inside $HOME, for a vitrum that comes
+# from a package (NixOS: flake.nix, nix/). The package and its module bring
+# the programs, the session and the system files; what is yours stays plain
+# files in ~/.config and ~/.local/share, as on every other distribution, and
+# this makes them: the niri config, settings.json, the links to the shell and
+# the apps, the terminal's and the toolkits' themes, the wallpapers.
+#
+#   vitrum-setup            make what is missing, refresh what the package owns
+#   vitrum-setup --login    the same, quietly: what the session wrapper runs
+#                           before niri at every login. It does nothing when
+#                           this package was already set up for you.
+#   vitrum-setup --force    do everything again, whatever the stamp says
+#   vitrum-setup --dry-run  print every action, change nothing
+#
+# It runs the installer's own stage functions (lib/stages), with the steps
+# that are root's or the package manager's left out, so there is one place
+# that knows what a niri config or a GTK settings.ini of vitrum's looks like.
+# Your files are never written over: settings.json, overrides.kdl, session.env,
+# your widgets and wallpapers are made once, and the originals of whatever is
+# replaced are kept in ~/.local/share/vitrum/originals, as the installer does.
+set -uo pipefail
+
+MODE=manual FORCE=0
+for _a in "$@"; do
+  case "$_a" in
+    --login)   MODE=login ;;
+    --force)   FORCE=1 ;;
+    --dry-run) export DRY_RUN=1 ;;
+    --help|-h) sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    *) printf 'vitrum-setup: unknown option: %s (try --help)\n' "$_a" >&2; exit 2 ;;
+  esac
+done
+unset _a
+
+# The package's copy of the repository: this file is its tools/vitrum-setup.
+VITRUM_DIR="$(cd -- "$(dirname -- "$(readlink -f -- "${BASH_SOURCE[0]}")")/.." && pwd)"
+export VITRUM_DIR
+[[ -f "$VITRUM_DIR/lib/common.sh" && -d "$VITRUM_DIR/shell" ]] \
+  || { printf 'vitrum-setup: %s is not a vitrum package\n' "$VITRUM_DIR" >&2; exit 1; }
+
+# The optional parts, as the system's configuration chose them (WANT_SDDM=1 …,
+# one a line): the NixOS module writes this file. Read before lib/components.sh
+# is sourced, which keeps what the environment already says.
+CHOICES="${VITRUM_SETUP_CHOICES:-/etc/vitrum/setup.env}"
+if [[ -r "$CHOICES" ]]; then
+  while IFS='=' read -r _k _v; do
+    [[ "$_k" =~ ^(WANT_[A-Z_]+|VITRUM_FASTFETCH_LOGO)$ && "$_v" =~ ^[A-Za-z0-9_-]*$ ]] && export "$_k=$_v"
+  done < "$CHOICES"
+  unset _k _v
+fi
+
+_state="${XDG_DATA_HOME:-$HOME/.local/share}/vitrum"
+_config="${XDG_CONFIG_HOME:-$HOME/.config}"
+STAMP="$_state/setup.stamp"
+# This package, with these choices: a new build or a changed option does the
+# work again, the same one logged into twice does not.
+WANT_STAMP="$VITRUM_DIR $(cksum < "$CHOICES" 2>/dev/null || echo -)"
+
+# --login, already set up: nothing to do, and nothing sourced. The checks are
+# the files a session cannot start without.
+if [[ "$MODE" == login && "$FORCE" != 1 && "${DRY_RUN:-0}" != 1 ]] \
+   && [[ "$(cat "$STAMP" 2>/dev/null)" == "$WANT_STAMP" ]] \
+   && [[ -f "$_config/vitrum/niri/config.kdl" && -f "$_config/vitrum/niri/generated/session.kdl" ]] \
+   && [[ -f "$_config/quickshell/vitrum/shell.qml" && -f "$_config/vitrum/settings.json" ]]; then
+  exit 0
+fi
+
+# At login there is no terminal to read this on: it goes to a log, the last
+# run's only.
+if [[ "$MODE" == login ]]; then
+  mkdir -p "$_state"
+  exec >"$_state/setup.log" 2>&1
+  printf 'vitrum-setup %s, from %s\n' "$(date '+%F %T')" "$VITRUM_DIR"
+fi
+
+# shellcheck source=lib/common.sh
+source "$VITRUM_DIR/lib/common.sh"
+
+# Nothing here is root's. The stage functions that also write a system file
+# (the session wrapper beside session.env) get it thrown away: on a packaged
+# system those files are the package's.
+sudo() { return 0; }
+sudo_write() { cat >/dev/null; }
+sudo_refresh() { :; }
+sudo_keepalive() { :; }
+
+# The session is systemd's (the package's wrapper starts niri.service).
+INIT_BACKEND=systemd
+# shellcheck source=lib/backend/init-systemd.sh
+source "$VITRUM_DIR/lib/backend/init-systemd.sh"
+for _s in 20-fonts 40-shell 45-terminal 50-apps 60-theming 80-session; do
+  # shellcheck source=/dev/null
+  source "$VITRUM_DIR/lib/stages/$_s.sh"
+done
+unset _s
+
+# The stored choices fill what the system's configuration does not decide (the
+# author's own setup), the defaults fill the rest.
+components_load || true
+components_defaults
+[[ -n "${VITRUM_LANG:-}" ]] || VITRUM_LANG="${VITRUM_LANG_STORED:-$(i18n_guess 2>/dev/null || true)}"
+export VITRUM_LANG
+# The login shell is the system configuration's to set (users.users.<you>.shell).
+export WANT_LOGIN_SHELL=0
+# The templates are read where the package has them.
+TERM_TEMPLATES="$VITRUM_DIR/config"
+
+FAILED=()
+# _do <function> [args…] — one step, in a subshell: a step that dies (the
+# stage functions exit on an error) must not take the login with it.
+_do() {
+  ( set -e; "$@" )
+  local rc=$?
+  (( rc == 0 )) || { FAILED+=("$1"); warn 'vitrum-setup: %s did not finish' "$1"; }
+  return 0
+}
+
+# _link <target> <link> — a link into the package, refreshed at every run (the
+# package's path changes with every build). A real file or folder in its place
+# is yours, or an install.sh's from before this system took vitrum over: it is
+# moved aside, never removed.
+_link() {
+  local target="$1" link="$2"
+  [[ -e "$target" ]] || { warn 'vitrum-setup: the package has no %s' "$target"; return 1; }
+  [[ -L "$link" && "$(readlink "$link")" == "$target" ]] && return 0
+  if [[ "$DRY_RUN" == "1" ]]; then dim "would link $link -> $target"; return 0; fi
+  mkdir -p "$(dirname "$link")"
+  if [[ -e "$link" && ! -L "$link" ]]; then
+    local aside; aside="$link.before-package.$(date +%Y%m%d-%H%M%S)"
+    mv "$link" "$aside" || return 1
+    info "$link was a folder of its own: moved to $aside"
+  fi
+  ln -sfn "$target" "$link"
+}
+
+# The shell and the apps run from ~/.config/quickshell, as everywhere (qs -c
+# vitrum): links into the package, whose apps already point at its shell. The
+# templates vitrum-theme renders from, and the Vesktop theme's files, likewise.
+_setup_links() {
+  step "links into the package"
+  local a
+  _link "$VITRUM_DIR/shell" "$XDG_CONFIG_HOME/quickshell/vitrum"
+  for a in settings disks about; do
+    _link "$VITRUM_DIR/apps/$a" "$XDG_CONFIG_HOME/quickshell/vitrum-$a"
+  done
+  _link "$VITRUM_DIR/config" "$VITRUM_STATE/templates"
+  _link "$VITRUM_DIR/assets/vesktop" "$VITRUM_STATE/vesktop"
+}
+
+# The palette and niri's generated look, effects and animations.
+_setup_theme() {
+  step "vitrum-theme"
+  [[ "$DRY_RUN" == "1" ]] && return 0
+  VITRUM_DATA="$VITRUM_DIR/shell/data" vitrum-theme --quiet \
+    || warn "vitrum-theme failed — the shell falls back to its built-in palette"
+}
+
+# What the package's files are copied from is read-only, and so are the copies:
+# yours to edit, so yours to write.
+_setup_writable() {
+  [[ "$DRY_RUN" == "1" ]] && return 0
+  local f
+  [[ -d "$XDG_CONFIG_HOME/vitrum/widgets/example-uptime" ]] && chmod -R u+w "$XDG_CONFIG_HOME/vitrum/widgets/example-uptime"
+  for f in "$VITRUM_DIR"/assets/wallpapers/*; do
+    [[ -f "$HOME/Pictures/Wallpapers/${f##*/}" ]] && chmod u+w "$HOME/Pictures/Wallpapers/${f##*/}"
+  done
+  return 0
+}
+
+# tmux's plugins come from the network (tpm clones them): not something a
+# login waits for. By hand, vitrum-setup fetches them.
+if [[ "$MODE" == login ]]; then
+  _terminal_tpm() { dim "tmux plugins: run vitrum-setup in a terminal to fetch them"; }
+fi
+
+_setup_terminal() {
+  _terminal_logo
+  _terminal_render
+  _terminal_fish
+  if [[ "$WANT_TMUX" == "1" ]]; then _terminal_tmux; fi
+}
+
+# niri's own word on the config; never fatal here, niri says the same on screen.
+_setup_validate() {
+  [[ "$DRY_RUN" == "1" ]] && return 0
+  have niri || return 0
+  niri validate -c "$NIRI_DIR/config.kdl" >/dev/null 2>&1 && { ok "niri accepts the config"; return 0; }
+  niri validate -c "$NIRI_DIR/config.kdl" 2>&1 | tail -n 15 >&2
+  return 1
+}
+
+FIRST=0
+[[ -f "$STAMP" || -f "$VITRUM_STATE/install.json" ]] || FIRST=1
+
+[[ "$DRY_RUN" == "1" ]] || mkdir -p "$VITRUM_STATE" "$VITRUM_PREFIX"
+
+# What a session cannot start without comes first, and none of it runs a
+# program that could hang: the links, an empty settings.json, the niri config.
+_do _setup_links
+_do _shell_settings
+_do components_save
+_do _session_wrapper          # session.env, once; the wrapper itself is the package's
+_do _session_spawns
+_do _session_config
+_do _session_overrides
+# Then what fills them in.
+_do _setup_theme
+_do _session_keybinds
+_do _apps_version
+_do _fonts_configure
+_do _setup_terminal
+_do stage_theming
+_do _shell_example_widget
+_do _setup_writable
+_do _setup_validate
+
+if [[ "$DRY_RUN" != "1" ]]; then
+  record_install "${FAILED[*]:+partial}"
+  # The welcome tour, at the first login after the first setup.
+  if [[ "$FIRST" == 1 ]]; then touch "$VITRUM_STATE/welcome"; fi
+  # A step that failed is tried again at the next login.
+  if [[ ${#FAILED[@]} -eq 0 ]]; then printf '%s\n' "$WANT_STAMP" > "$STAMP"; fi
+  # By hand, inside the session: the running shell is the old package's.
+  if [[ "$MODE" != login ]]; then _shell_restart; fi
+fi
+
+if [[ ${#FAILED[@]} -gt 0 ]]; then
+  err 'vitrum-setup: %s step(s) did not finish: %s' "${#FAILED[@]}" "${FAILED[*]}"
+  exit 1
+fi
+ok "vitrum is set up for $(id -un) ($(vitrum_repo_version))"

@@ -98,6 +98,18 @@ FIXED_ROLES = {"dark": {"warning": "#fdd663", "success": "#81c995"}, "light": {"
 
 # ----------------------------------------------------------------- data -----
 
+def system_data_dirs(env=None) -> list:
+    """Where the system keeps shared data (themes, icons, Kvantum): each
+    absolute dir of XDG_DATA_DIRS (its default when unset), then /usr/share,
+    where all but NixOS have it. The same order as the shell's lib/paths.js."""
+    env = os.environ if env is None else env
+    dirs = []
+    for p in (env.get("XDG_DATA_DIRS") or "/usr/local/share:/usr/share").split(":") + ["/usr/share"]:
+        if p.startswith("/") and Path(p) not in dirs:
+            dirs.append(Path(p))
+    return dirs
+
+
 def data_dir() -> Path:
     env = os.environ.get("VITRUM_DATA")
     candidates = [Path(env)] if env else []
@@ -826,14 +838,14 @@ def gtk_theme_name(scheme: str, themes: Path = None) -> str:
     libadwaita — pavucontrol — get from "Adwaita") has its colours baked in and
     ignores vitrum.css's @define-color; adw-gtk3 reads libadwaita's colour names,
     so the palette reaches those apps too, and GTK 3 ones. The package puts it
-    in /usr/share/themes; on Void, which has none, the installer unpacks the
+    in /usr/share/themes (the system's data dirs are all looked in); on Void, which has none, the installer unpacks the
     upstream release into the user's own themes folder."""
     name = "adw-gtk3-dark" if scheme == "dark" else "adw-gtk3"
     if themes is not None:
         dirs = [Path(themes)]
     else:
         data = Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local/share")
-        dirs = [Path("/usr/share/themes"), data / "themes"]
+        dirs = [d / "themes" for d in system_data_dirs()] + [data / "themes"]
     return name if any((d / name).is_dir() for d in dirs) else "Adwaita"
 
 

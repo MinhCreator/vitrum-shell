@@ -25,6 +25,7 @@ import qs.modules.welcome
 import qs.modules.screencast
 import qs.modules.corners
 import qs.modules.picker
+import qs.modules.player
 import qs.ipc
 
 /*
@@ -113,6 +114,7 @@ ShellRoot {
             // named here at the start, which also starts the polkit agent.
             OnDemand { want: UiState.launcher && perScreen.focused; Launcher { modelData: perScreen.modelData } }
             OnDemand { want: UiState.keybinds && perScreen.focused; KeybindSheet { modelData: perScreen.modelData } }
+            OnDemand { want: UiState.player && perScreen.focused; FullPlayer { modelData: perScreen.modelData } }
             OnDemand { want: UiState.welcome && perScreen.focused; WelcomeTour { modelData: perScreen.modelData } }
             OnDemand { want: UiState.screencastRequest !== null && perScreen.focused; ScreenSharePicker { modelData: perScreen.modelData } }
             Osd { modelData: perScreen.modelData }

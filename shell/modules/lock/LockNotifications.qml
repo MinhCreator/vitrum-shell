@@ -7,10 +7,10 @@ import qs.components
 import "root:/lib/lock.js" as Lib
 
 // What arrived while locked, grouped by app: glass cards (Tokens.radiusTile)
-// with the app's icon, and a count badge in the dichroic tint when there is
-// more than one. lock.notifications decides how much they say (off / app
-// names / full text). With full text a click opens a group to its newest few
-// (the badge's tint drifts while it is open); new groups slide in.
+// with the app's icon, and a count badge of lit glass when there is more than
+// one. lock.notifications decides how much they say (off / app names / full
+// text). With full text a click opens a group to its newest few (the badge's
+// light leans over while it is open); new groups slide in.
 Column {
     id: list
     property real since: Date.now()
@@ -61,7 +61,7 @@ Column {
             width: list.width
             radius: Tokens.radiusTile
             readonly property bool canOpen: modelData.items.length > 1
-            tint: cardMouse.containsMouse && canOpen ? Colors.alpha(Colors.text, 0.12) : Qt.rgba(1, 1, 1, Colors.dark ? 0.07 : 0.16)
+            tint: cardMouse.containsMouse && canOpen ? Colors.alpha(Colors.text, 0.12) : card.rest
             Behavior on tint { enabled: Motion.enabled; ColorAnim {} }
             height: head.height + (open ? more.implicitHeight + Tokens.gap * 0.5 : 0) + Tokens.padding * 1.2
             Behavior on height { enabled: Motion.enabled; SpringAnim { token: Motion.smooth } }
@@ -97,16 +97,20 @@ Column {
                     width: parent.width - Tokens.iconSize * 1.6 - countPill.width - 2 * Tokens.gap
                     spacing: 1
                     Label { width: parent.width; text: card.modelData.title ? card.modelData.app + " · " + card.modelData.title : card.modelData.app; font.weight: Font.DemiBold; elide: Text.ElideRight }
-                    Label { width: parent.width; visible: card.modelData.body.length > 0; text: card.modelData.body; role: "dim"; size: Tokens.textSmall; elide: Text.ElideRight; opacity: card.open ? 0 : 1 }
+                    Label { width: parent.width; visible: card.modelData.body.length > 0; text: card.modelData.body; role: "dim"; size: Tokens.textSmall; elide: Text.ElideRight
+                        // Gives way to the full texts below.
+                        opacity: card.open ? 0 : 1
+                        Behavior on opacity { enabled: Motion.enabled; EaseAnim {} }
+                    }
                 }
-                // How many, when grouped: a small badge in the dichroic tint
-                // (it drifts while the group is open).
+                // How many, when grouped: a small badge of lit glass (its
+                // light leans over while the group is open).
                 Item {
                     id: countPill
                     anchors.verticalCenter: parent.verticalCenter
                     visible: card.modelData.count > 1
                     width: visible ? Math.max(height * 1.3, cnt.implicitWidth + Tokens.gap * 1.4) : 0; height: Tokens.iconSize * 1.25
-                    ShellTint { anchors.fill: parent; radius: Tokens.radiusButton; group: "lock"; active: countPill.visible; hovered: card.open }
+                    ShellTint { anchors.fill: parent; radius: Tokens.radiusKnob; group: "lock"; active: countPill.visible; hovered: card.open }
                     Label { id: cnt; anchors.centerIn: parent; text: card.modelData.count; size: Tokens.textSmall; numeric: true; font.weight: Font.DemiBold }
                 }
             }
@@ -120,7 +124,9 @@ Column {
                 opacity: card.open ? 1 : 0
                 Behavior on opacity { enabled: Motion.enabled; EaseAnim {} }
                 Repeater {
-                    model: card.open ? card.modelData.items : []
+                    // Kept while the card closes: the texts fade as it folds,
+                    // instead of going at once and leaving it to shrink empty.
+                    model: card.canOpen ? card.modelData.items : []
                     delegate: Column {
                         required property var modelData
                         width: more.width

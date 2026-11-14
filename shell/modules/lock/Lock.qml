@@ -26,14 +26,15 @@ Scope {
     id: root
 
     property string password: ""
-    // Typing (and a failed attempt, which clears it) is activity too.
-    onPasswordChanged: poke()
+    // Typing (and a failed attempt, which clears it) is activity too. And
+    // typing again answers the error: it has been read.
+    onPasswordChanged: { poke(); if (password.length > 0) error = ""; }
     property string error: ""
     property bool busy: false
     /// The unlock animation is playing; the session unlocks when it ends.
     property bool leaving: false
     /// How long it plays: the blocks float off, the wallpaper sharpens and a
-    /// soft dichroic flash blooms out of the field and fades (LockView).
+    /// soft light blooms out of the field and fades (LockView).
     readonly property int leaveDuration: Motion.enabled ? Math.round(Motion.emphasized * 1.6) : 0
     /// Wrong attempts since the last one went through (for the flash).
     property int failures: 0

@@ -1,10 +1,12 @@
 """vitrum-theme's terminal/toolkit renderer (tools/vitrum_theme/render.py)."""
 import json
+import os
 import re
 import sys
 import subprocess
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -866,6 +868,22 @@ class KvantumWidgets(KvantumMenus):
         colours = self.section(cfg, "GeneralColors")
         self.assertEqual(colours["base.color"], c["bg"])
         self.assertNotEqual(colours["window.color"], c["bg"], "the sidebar and toolbar stand apart from the file view")
+
+
+class SystemData(unittest.TestCase):
+    def test_kvantum_base_from_a_data_dir(self):
+        tmp = Path(tempfile.mkdtemp())
+        self.assertEqual(R.kvantum_base("KvGnome", [tmp]), R.KVANTUM_BASE, "nowhere: where it always was")
+        (tmp / "Kvantum" / "KvGnome").mkdir(parents=True)
+        (tmp / "Kvantum" / "KvGnome" / "KvGnome.kvconfig").write_text("")
+        self.assertEqual(R.kvantum_base("KvGnome", [tmp / "none", tmp]), tmp / "Kvantum")
+
+    def test_icon_roots_keep_the_old_ones_and_add_the_data_dirs(self):
+        with mock.patch.dict(os.environ, {"XDG_DATA_DIRS": "/run/current-system/sw/share:/usr/share"}):
+            roots = R.icon_roots()
+        self.assertEqual(roots[:3], list(R.ICON_ROOTS))
+        self.assertIn(Path("/run/current-system/sw/share/icons"), roots)
+        self.assertEqual(len(roots), len(set(roots)))
 
 
 class IconsFollowTheScheme(unittest.TestCase):

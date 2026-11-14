@@ -15,7 +15,8 @@ function parseLrc(text) {
             last = STAMP.lastIndex;
         }
         if (!stamps.length) return;
-        var body = line.slice(last).trim();
+        // Word-by-word timing ("<00:18.89>We're <00:19.25>no"): the marks go, the words stay.
+        var body = line.slice(last).replace(/<\d{1,3}:\d{2}(?:[.:]\d{1,3})?>/g, "").replace(/\s+/g, " ").trim();
         stamps.forEach(function (t) { out.push({ t: Math.round(t * 1000) / 1000, text: body }); });
     });
     out.sort(function (a, b) { return a.t - b.t; });

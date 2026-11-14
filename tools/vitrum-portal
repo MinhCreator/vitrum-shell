@@ -23,8 +23,15 @@ import dbus.service
 from dbus.mainloop.glib import DBusGMainLoop
 from gi.repository import GLib
 
-sys.path.insert(0, os.path.join(os.environ.get("XDG_DATA_HOME", os.path.expanduser("~/.local/share")), "vitrum", "lib"))
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# vitrum_portal.py: where VITRUM_LIB says, beside this file (the installed
+# layout, and a package's), in VITRUM_LIBEXEC, then the installer's lib folder.
+_HERE = os.path.abspath(__file__)
+for _dir in (os.environ.get("VITRUM_LIB"), os.path.dirname(os.path.realpath(_HERE)), os.path.dirname(_HERE),
+             os.environ.get("VITRUM_LIBEXEC"),
+             os.path.join(os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share"), "vitrum", "lib")):
+    if _dir and os.path.isfile(os.path.join(_dir, "vitrum_portal.py")):
+        sys.path.insert(0, _dir)
+        break
 import vitrum_portal as P  # noqa: E402
 
 BUS_NAME = "org.freedesktop.impl.portal.desktop.vitrum"
@@ -38,7 +45,7 @@ MUTTER = "org.gnome.Mutter.ScreenCast"
 MUTTER_PATH = "/org/gnome/Mutter/ScreenCast"
 
 RUNTIME = Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / "vitrum-screencast"
-IPC = os.environ.get("VITRUM_IPC") or os.path.expanduser("~/.local/bin/vitrum-ipc")
+IPC = P.ipc_command()
 PICK_TIMEOUT_S = 180
 STREAM_TIMEOUT_S = 10
 OK, CANCELLED, FAILED = 0, 1, 2

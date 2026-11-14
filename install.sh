@@ -3,6 +3,9 @@
 #  vitrum — a glass shell for niri (Gentoo with OpenRC or systemd, Arch with systemd,
 #  Fedora 43 or newer with systemd, Void (glibc) with runit and elogind)
 #
+#  NixOS is not installed by this script: there vitrum is a flake (flake.nix,
+#  the README's NixOS section), and running this says what to add.
+#
 #  Usage:
 #    ./install.sh                 install; on a machine with vitrum, update it
 #    ./install.sh --dry-run       print every action, change nothing

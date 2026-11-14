@@ -127,3 +127,17 @@ eq(l.powerLabel("reboot", false), "Restart", "restart");
 eq(l.powerLabel("reboot", true), "Again to restart", "armed restart");
 eq(l.powerLabel("poweroff", true), "Again to power off", "armed power off");
 eq(l.powerLabel("suspend", true), "Sleep", "sleep is never armed");
+
+// refusal(speed): the wrong-password timings follow the motion speed
+eq(JSON.stringify(l.refusal(1)), JSON.stringify({ swing: 520, flashIn: 120, hold: 300, flashOut: 560, dotsAfter: 380, dotsOut: 160 }), "speed 1: as designed");
+eq(l.refusal(2).swing, 260, "twice as fast: half as long");
+eq(l.refusal(0.5).flashOut, 1120, "half speed: twice as long");
+eq(l.refusal(0).swing, 520, "no speed: as designed");
+eq(l.refusal(undefined).hold, 300, "nothing given: as designed");
+eq(l.refusal(1000).flashIn, 1, "never 0");
+
+// statusLine(error, busy, capsLock): the line under the field
+eq(l.statusLine("Wrong password", true, true), "Wrong password", "an error first");
+eq(l.statusLine("", true, true), "Checking…", "then the check");
+eq(l.statusLine("", false, true), "Caps Lock is on", "then Caps Lock");
+eq(l.statusLine("", false, false), " ", "else a space, to keep the row");
