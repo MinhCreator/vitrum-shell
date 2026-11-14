@@ -269,7 +269,8 @@
   "media": {
     "lyrics": true,
     "lyricsInBar": false,
-    "visualizer": true
+    "visualizer": true,
+    "playerScreen": ""
   },
   "audio": {
     "noiseFilter": false

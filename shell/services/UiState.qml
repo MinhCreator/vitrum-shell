@@ -41,6 +41,16 @@ Singleton {
     property bool keybinds: false
     /// The full-screen player (Mod+Alt+M, or the button on the bar's player).
     property bool player: false
+    /// The screen it is kept on (media.playerScreen), "" when it goes with
+    /// the focus: unset, or that screen is not plugged in.
+    readonly property string playerScreen: {
+        const want = Settings.get("media.playerScreen", "");
+        return want && Quickshell.screens.some(s => s.name === want) ? want : "";
+    }
+    /// Is this screen the one the full-screen player shows on?
+    function playerOn(name) {
+        return name === (playerScreen || Niri.focusedOutput || (Quickshell.screens.length ? Quickshell.screens[0].name : ""));
+    }
     /// The welcome tour (the installer's marker, or vitrum-ipc welcome open).
     property bool welcome: false
     /// The open tour's step (vitrum-ipc welcome step), and a move asked for from
@@ -77,7 +87,11 @@ Singleton {
     }
     function closePanel() { panel = ""; }
 
-    function closeOverlays() { launcher = false; switcher = false; capture = false; power = false; wallpaperPicker = false; keybinds = false; welcome = false; player = false; }
+    function closeOverlays() { launcher = false; switcher = false; capture = false; power = false; wallpaperPicker = false; keybinds = false; welcome = false;
+        // Kept on a screen, it stays while you work on another: search or a
+        // panel opening there does not take it away. Its own ways out do.
+        if (!playerScreen) player = false;
+    }
     function toggle(name) {
         const was = root[name];
         closePanel(); closeOverlays();

@@ -23,7 +23,7 @@ var panes = [
     { group: "Desktop", id: "autostart", name: "Autostart", icon: "rocket", keys: [], words: "startup login autostart start boot launch tray" },
     { group: "Desktop", id: "capture", name: "Screenshots & recording", icon: "screenshot", keys: ["capture", "screencast", "picker"], words: "screen recording capture share colour picker text recognition" },
     { group: "System", id: "sound", name: "Sound", icon: "volume-high", keys: ["audio", "sounds"], words: "audio volume speakers microphone output input noise sounds" },
-    { group: "System", id: "media", name: "Media", icon: "music", keys: ["media"], words: "music player lyrics spectrum visualizer" },
+    { group: "System", id: "media", name: "Media", icon: "music", keys: ["media"], words: "music player lyrics spectrum visualizer full screen pin monitor" },
     { group: "System", id: "network", name: "Network", icon: "wifi", keys: [], words: "wifi wi-fi ethernet internet vpn" },
     { group: "System", id: "bluetooth", name: "Bluetooth", icon: "bluetooth", keys: [], words: "headphones devices pair" },
     { group: "System", id: "displays", name: "Displays", icon: "screen", keys: [], words: "monitor resolution refresh rate scale vrr brightness" },

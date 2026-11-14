@@ -102,7 +102,7 @@ when something breaks.
 - Type Japanese, Korean and Chinese with an optional input method: fcitx5 with Mozc, Hangul and Pinyin takes over your layouts, and Alt+Shift still switches them.
 - A lock screen whose field lights up as you type. Caps Lock gets a hint, your avatar sits in a rim of lit glass, and it goes quiet when idle.
 - Volume, microphone, brightness and keyboard layout show as a drop of glass under the bar's centre island, with every layout in a row and the current one lit.
-- A player with the cover behind it, synced lyrics and a spectrum, in the bar, on the desktop and on the lock screen. `Mod+Alt+M` opens it full screen: click a line of the lyrics to jump there.
+- A player with the cover behind it, synced lyrics and a spectrum, in the bar, on the desktop and on the lock screen. `Mod+Alt+M` opens it full screen: click a line of the lyrics to jump there. With two screens, pin it to one and keep working on the other.
 - Game mode turns on by itself when a game goes fullscreen. Video wallpapers pause under windows.
 - Lite mode for older hardware: blur, glass, animations, shadows, the live wallpaper and more, off one by one or all at once, by hand or on battery.
 

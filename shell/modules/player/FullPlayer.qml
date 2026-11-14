@@ -30,7 +30,9 @@ PanelWindow {
     id: root
     required property var modelData
     screen: modelData
-    readonly property bool open: gate.ready && UiState.player && screen.name === (Niri.focusedOutput || Quickshell.screens[0].name)
+    readonly property bool open: gate.ready && UiState.player && UiState.playerOn(screen.name)
+    /// Kept on this screen (the pin): it does not follow the focus to another.
+    readonly property bool pinned: UiState.playerScreen === screen.name
 
     MapGate { id: gate; want: root.open }      // mapped only while open (components/MapGate.qml)
     visible: gate.mapped
@@ -41,7 +43,9 @@ PanelWindow {
     color: "transparent"
     WlrLayershell.namespace: "vitrum-player"
     WlrLayershell.layer: WlrLayer.Overlay
-    WlrLayershell.keyboardFocus: open ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+    // Pinned, it must not hold the keyboard: you are typing on another screen.
+    // Its keys work once it is clicked.
+    WlrLayershell.keyboardFocus: !open ? WlrKeyboardFocus.None : pinned ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.Exclusive
 
     mask: Region { item: root.open ? catcher : dot }
     // Off the screen's top-left pixel: the top-left hot corner sits there, under this layer.
@@ -302,12 +306,14 @@ PanelWindow {
     component RoundButton: Item {
         id: button
         property string icon: ""
+        /// On (the pin): brighter, as the player's own buttons are.
+        property bool lit: false
         signal clicked()
         width: Math.round(root.u * 1.2); height: width
         Rectangle {
             anchors.fill: parent
             radius: width / 2
-            color: Colors.alpha(Colors.text, buttonMouse.pressed ? 0.2 : buttonMouse.containsMouse ? 0.14 : 0.07)
+            color: Colors.alpha(Colors.text, buttonMouse.pressed ? 0.2 : button.lit ? 0.26 : buttonMouse.containsMouse ? 0.14 : 0.07)
             Behavior on color { enabled: Motion.enabled; ColorAnim { duration: Motion.fast } }
         }
         Icon { anchors.centerIn: parent; name: button.icon; filled: true; size: Math.round(button.width * 0.45) }
@@ -692,6 +698,15 @@ PanelWindow {
             opacity: root.backIn
             icon: "close"
             onClicked: UiState.player = false
+        }
+        // Keep it on this screen. Only with a second screen to go to.
+        RoundButton {
+            visible: Quickshell.screens.length > 1 || root.pinned
+            x: closeButton.x - width - Tokens.gap; y: root.edge
+            opacity: root.backIn * (lit ? 1 : 0.7)
+            icon: "pin"
+            lit: root.pinned
+            onClicked: Settings.set("media.playerScreen", root.pinned ? "" : root.screen.name)
         }
     }
 }

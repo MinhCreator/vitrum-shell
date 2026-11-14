@@ -1,4 +1,5 @@
 import QtQuick
+import Quickshell
 import qs.services
 import qs.theme
 import qs.components
@@ -14,6 +15,12 @@ Page {
     }
     Section {
         title: "Player"
-        SettingToggle { key: "media.visualizer"; label: "Spectrum in the player"; hint: "Needs cava."; divider: false }
+        SettingToggle { key: "media.visualizer"; label: "Spectrum in the player"; hint: "Needs cava." }
+        SettingChoice {
+            key: "media.playerScreen"; label: "Full-screen player on"
+            hint: "Follows you: the screen you are on. Or keep it on one, and work on another; the pin in the player does the same."
+            values: [""].concat(Quickshell.screens.map(s => s.name)); names: ({ "": "Follows you" })
+            divider: false
+        }
     }
 }
